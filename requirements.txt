@@ -1,0 +1,8 @@
+Flask==3.0.0
+Flasgger==0.9.5
+mysql-connector-python==8.2.0
+cx_Oracle==8.3.0
+bcrypt==4.0.1
+cryptography==41.0.3
+python-dotenv==1.0.0
+PyJWT==2.8.0
