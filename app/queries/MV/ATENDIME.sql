@@ -1,0 +1,1 @@
+SELECT * FROM atendimentos WHERE data >= '2024-01-01'
