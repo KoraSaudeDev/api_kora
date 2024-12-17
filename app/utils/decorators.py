@@ -3,7 +3,7 @@ from flask import request, jsonify
 import jwt
 from app.config.env import SECRET_KEY
 from app.utils.helpers import check_user_permission
-
+from app.config.db_config import create_db_connection_mysql 
 
 def token_required(f):
     @wraps(f)
@@ -41,25 +41,45 @@ def admin_required(f):
 
 def permission_required(route_prefix):
     """
-    Middleware para verificar permissões de rota para um usuário autenticado.
-    Usuários administradores (is_admin = 1) têm acesso a todas as rotas.
+    Decorator para verificar permissões do usuário com base no prefixo da rota.
     """
     def decorator(f):
         @wraps(f)
-        def wrapper(user_data, *args, **kwargs):
-            # Verifica se o usuário é administrador
+        def decorated_function(*args, **kwargs):
+            user_data = kwargs.get("user_data")
+
+            # Caso o usuário seja administrador, pula a verificação
             if user_data.get("is_admin"):
-                return f(user_data, *args, **kwargs)
+                return f(*args, **kwargs)
 
             user_id = user_data.get("id")
+            if not user_id:
+                return jsonify({"status": "error", "message": "Usuário não autenticado"}), 403
 
-            # Verificar se o usuário possui permissão para acessar a rota
-            if not check_user_permission(user_id, route_prefix):
-                return jsonify({
-                    "status": "error",
-                    "message": "Acesso negado. Você não tem permissão para acessar esta rota."
-                }), 403
+            try:
+                conn = create_db_connection_mysql()
+                cursor = conn.cursor()
 
-            return f(user_data, *args, **kwargs)
-        return wrapper
+                # Verifica se o usuário tem permissão para acessar a rota
+                query = """
+                    SELECT r.route_prefix
+                    FROM routes r
+                    INNER JOIN user_routes ur ON r.id = ur.route_id
+                    WHERE ur.user_id = %s AND r.route_prefix = %s
+                """
+                cursor.execute(query, (user_id, route_prefix))
+                result = cursor.fetchone()
+
+                cursor.close()
+                conn.close()
+
+                if not result:
+                    return jsonify({"status": "error", "message": "Permissão negada"}), 403
+
+                return f(*args, **kwargs)
+
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Erro ao verificar permissões: {str(e)}"}), 500
+
+        return decorated_function
     return decorator

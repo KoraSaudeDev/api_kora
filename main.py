@@ -42,7 +42,7 @@ app.register_blueprint(verzo_bp)
 app.register_blueprint(route_bp)
 app.register_blueprint(connection_bp)
 app.register_blueprint(system_bp)
-app.register_blueprint(user_bp) 
+app.register_blueprint(user_bp)   
 
 @app.route('/', methods=['GET'])
 def home():
