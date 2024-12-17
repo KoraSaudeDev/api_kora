@@ -1,0 +1,224 @@
+/* Reset básico */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+header {
+   height: 80px;
+    background: #284557;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: 20px;
+
+}
+
+header img {
+    height: 60px;
+    width: 160px;
+}
+header .fa-bars {
+    font-size: 40px;
+    color:white;
+}
+
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    color: #284557;
+}
+
+.container {
+    display: flex;
+    min-height: 100vh;
+}
+
+.new-menu {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0px;
+    height: 100%;
+    background: white;
+    z-index: 2000;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+    transition: all 1.0s ease;
+    opacity: 0;
+}
+
+.new-menu-open {
+width: 250px;
+opacity: 100;
+}
+
+.new-menu ul {
+padding-top: 20px;
+
+}
+
+.new-menu li {
+padding-left: 10px;
+height: 40px;
+display:flex;
+align-items: center;
+/* border-top: 1px solid red; */
+}
+
+.new-menu li a {
+    color:#555;
+    text-decoration: none;
+    
+}
+
+.new-menu li a:hover {
+    color:#555;
+    text-decoration: underline;
+    
+}
+
+.new-menu h2 {
+    padding-left: 10px;
+    padding-top: 10px;
+}
+
+        /* Estilo do cabeçalho com destaque */
+        .highlight-header {
+            background-color: #f4f4f4; /* Cor de fundo */
+            border-bottom: 3px solid #4a3b6c; /* Linha de destaque */
+            padding: 20px;
+            text-align: center;
+        }
+
+        .highlight-header h1 {
+            font-size: 24px;
+            color: #4a3b6c; /* Cor do texto */
+            margin: 0;
+        }
+
+        .highlight-header hr {
+            border: 0;
+            border-top: 1px solid #ccc; /* Linha horizontal fina */
+            margin: 10px 0;
+        }
+
+        /* Estilo do conteúdo */
+        .content {
+            padding: 20px;
+            font-size: 16px;
+            line-height: 1.5;
+            color: #333;
+        }
+
+
+/* Sidebar */
+.sidebar {
+    width: 250px;
+    background-color: #284557;
+    color: white;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar nav ul {
+    list-style: none;
+}
+
+.sidebar nav ul li {
+    margin-bottom: 10px;
+}
+
+.sidebar nav ul li button,
+.sidebar nav ul li a {
+    color: white;
+    text-decoration: none;
+    background: none;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.sidebar nav ul li a:hover,
+.sidebar nav ul li button:hover {
+    text-decoration: underline;
+}
+
+.hidden {
+    display: none;
+}
+
+.expandable {
+    font-size: 18px;
+    margin-bottom: 10px;
+}
+
+.sub-menu {
+    padding-left: 15px;
+}
+
+.menu-options {
+    margin-top: 15px;
+}
+
+.menu-options a {
+    display: block;
+    margin-bottom: 10px;
+    color: white;
+}
+
+.content {
+    flex: 1;
+    padding: 20px;
+    background-color: white;
+}
+
+header {
+    margin-bottom: 20px;
+}
+
+header h1 {
+    font-size: 24px;
+    color: #284557;
+}
+
+.section {
+    margin-bottom: 20px;
+}
+
+.section h2 {
+    font-size: 18px;
+    color: #284557;
+    margin-bottom: 10px;
+}
+
+.section p {
+    line-height: 1.6;
+}
+
+/* Botão Voltar ao Topo */
+#backToTop {
+    display: none; /* Escondido por padrão */
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 1000;
+    background-color: #251b3d; /* Cor de fundo */
+    color: white; /* Cor da seta */
+    border: none;
+    border-radius: 50%;
+    padding: 20px;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease-in-out;
+}
+
+#backToTop:hover {
+    background-color: #284557; /* Cor ao passar o mouse */
+}

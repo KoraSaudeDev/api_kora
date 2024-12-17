@@ -60,7 +60,6 @@ def create_route(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @route_bp.route('/edit/<int:route_id>', methods=['PUT'])
 @token_required
 @admin_required
@@ -126,5 +125,59 @@ def edit_route(user_data, route_id):
         conn.close()
 
         return jsonify({"status": "success", "message": "Nome da rota atualizado com sucesso."}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@route_bp.route('/my', methods=['GET'])
+@token_required
+def get_user_routes(user_data):
+    """
+    Retorna todas as rotas associadas ao usuário logado.
+    ---
+    tags:
+      - Routes
+    security:
+      - BearerAuth: []
+    responses:
+      200:
+        description: Lista de rotas associadas ao usuário.
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  route_prefix:
+                    type: string
+                    example: "/verzo"
+                  description:
+                    type: string
+                    example: "Rota principal da API Verzo"
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        user_id = user_data['id']
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        query = """
+            SELECT r.id, r.route_prefix, r.description
+            FROM routes r
+            INNER JOIN user_routes ur ON r.id = ur.route_id
+            WHERE ur.user_id = %s
+        """
+        cursor.execute(query, (user_id,))
+        user_routes = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "routes": user_routes}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

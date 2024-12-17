@@ -4,6 +4,8 @@ from flask import Blueprint, request, jsonify
 from app.utils.decorators import token_required, admin_required, permission_required
 from app.config.db_config import create_db_connection_mysql, create_verzo_connection   
 from flask import current_app
+from flask import Flask, Blueprint, request, jsonify, send_from_directory
+import os
 
 # Definindo o Blueprint antes de ser usado
 verzo_bp = Blueprint('verzo', __name__, url_prefix='/verzo')
@@ -41,6 +43,46 @@ TASY_DATABASES = [
     "tasy_palmas",
     "tasy_sao_francisco"
 ]
+
+@verzo_bp.route('/', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/verzo')
+def home():
+    """
+    Página inicial da API.
+    ---
+    responses:
+      200:
+        description: Página inicial da API.
+        content:
+          text/html:
+            schema:
+              type: string
+    """
+    # Caminho absoluto até a pasta static/html
+    static_path = os.path.abspath(os.path.join(os.getcwd(), 'static', 'html'))
+    return send_from_directory(static_path, 'index.html')
+
+@verzo_bp.route('/docs', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/verzo')
+def verzo_page():
+    """
+    Rota para exibir a página Verzo.
+    ---
+    tags:
+      - Páginas HTML
+    responses:
+      200:
+        description: Retorna o HTML da página Verzo.
+        content:
+          text/html:
+            schema:
+              type: string
+    """
+    # Caminho absoluto até a pasta static/html
+    static_path = os.path.join(os.getcwd(), 'static', 'html')
+    return send_from_directory(static_path, 'verzo.html')
 
 @verzo_bp.route('/<route_type>/<database>/<query_name>', methods=['POST'])
 @token_required

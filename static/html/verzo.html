@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sobre as APIs</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <script defer src="/static/js/script.js"></script>
+    <style>
+        .hidden {
+            display: none;
+        }
+
+        .content {
+            padding: 20px;
+            border: 1px solid #ddd;
+            margin-top: 10px;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <i class="fa-solid fa-bars" id="button-header"></i>
+        <img src="/static/img/logo.png" />
+    </header>
+    <div class="new-menu">
+        <h2>Menu</h2>
+        <ul>
+            <li><a href="#" onclick="return false;">Documentação</a></li>
+            <li><a href="/verzo/apidocs">Swagger</a></li>
+            <li><a href="/static/files/Verzo.postman_collection.json" download>Baixar Coleção do Postman</a></li>
+        </ul>
+    </div>
+
+    <!-- Container Principal -->
+    <div class="container">
+        <!-- Menu Lateral Fixo -->
+        <aside class="sidebar">
+            <nav>
+                <ul>
+                    <li>
+                        <button class="expandable">Documentação</button>
+                        <ul class="sub-menu">
+                            <li><a href="#secao1">Sobre</a></li>
+                            <li><a href="#secao2">API</a></li>
+                            <li><a href="#secao3">Autenticação</a></li>
+                            <li><a href="#secao4">MV</a></li>
+                            <li><a href="#secao5">TASY</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Conteúdo -->
+        <main class="content">
+            <section id="secao1" class="section">
+                <div class="highlight-header">
+                    <h1>Sobre</h1>
+                    <hr />
+                </div>
+                <br>
+                <p>
+                <h2>Objetivo</h2>
+                Esse guia tem como objetivo nortear as Integrações entre a Kora e os sistemas de nossos clientes e
+                parceiros (ERPs e sistemas auxiliares).
+                As integrações aqui documentadas servem como guia de um projeto de Busca de informações em ERPS
+                parceiros que são eles MV e TASY. Em casos de necessidades extras ou cujo escopo contratado difere do
+                especificado neste documento, favor consultar o ponto focal do projeto.
+                <br><br>
+                </p>
+                <img src="/static/img/his_verzo.png" alt="Descrição da imagem" style="max-width: 100%; height: auto;" />
+            </section>
+            <br><br>
+            <section id="secao2" class="section">
+                <div class="highlight-header">
+                    <h1>API</h1>
+                    <hr />
+                </div>
+                <br>
+                <p>
+                    Nossa aplicação é projetada para que o usuário possa escolher apenas um banco de dados, por vez
+                    porém alguns parametros são obrigatórios serem informados, que são os seguintes parametros
+                    <br><br>
+                <ul>
+                    <li>limit: Nossa aplicação terá um limite de registro que poderão ser buscados, o limite padrão e
+                        100 dados então caso não passe o limit
+                        saiba que será sempre retornado 100 registros por banco </li>
+                    <br><br>
+                    <li>offset: Nossa aplicação tem uma paginação, então nosso offset padrão será 0, caso você passe
+                        valores como 1,2 e assim por diante
+                        irá trazer os itens das próximas páginas </li>
+                </ul>
+                <br><br>
+                </p>
+            </section>
+            <section id="secao3" class="section">
+                <div class="highlight-header">
+                    <h1>Autenticação</h1>
+                    <hr />
+                </div>
+                <br>
+                <p>
+                    Nossa aplicação utiliza o JWT como forma de autenticação então o usuário deve informar seu nome e
+                    sua senha
+                    com isso e gerado um access_token com um token, então você deve utilizar esse token para conseguir
+                    acessar as demais rotas protegidas.
+                    <br><br>
+
+                <h3 style="text-align: center;">Forma de autenticação</h3>
+                Nossa rota de login espera uma requisição do tipo POST apontando para a rota /login, obrigatóriamente
+                você deve passar os parametros via corpo da requisição.
+                <br><br>
+                <img src="/static/img/login.png" alt="Descrição da imagem"
+                    style="text-align: center; max-width: 100%; height: auto;" />
+                <br><br>
+                <h3 style="text-align: center;">Tempo de validade do token</h3>
+                O token é válido por uma hora, após sua criação
+                <br><br>
+                <h3 style="text-align: center;">Headers</h3>
+                Obrigatóriamente você deve passar um header chamado Content-Type com o valor de application/json
+                <br><br>
+                <img src="/static/img/headers.png" alt="Descrição da imagem"
+                    style="text-align: center; max-width: 100%; height: auto;" />
+                <br><br>
+                </p>
+            </section>
+            <section id="secao4" class="section">
+                <div class="highlight-header">
+                    <h1>MV</h1>
+                </div>
+                <br><br>
+                <p>
+                    Como falado anteriormente nós temos endpoints tanto para MV quanto para o TASY, nós temos uma série
+                    de rotas, todas elas
+                    com o mesmo nome do SQL que nós foi informado anteriormente, então sempre que você estiver
+                    executando uma rota, estaremos executando
+                    a mesma query que foi fornecida anteiormente
+                    <br><br>
+                <h3 style="text-align: center;">Bases MV</h3>
+                Você poderá escolher uma unidade específica que deseja bastando passar a sigla da unidade que deseja,
+                abaixo estão todas as siglas de todoas as unidades integradas. 
+                <br><br>
+                <ul>
+                    <li>HMS - Hospital Meridional Serra</li>
+                    <li>HA - Hospital Anchietta</li>
+                    <li>HMC - Hospital Meridional Cariacica</li>
+                    <li>ING_OTO</li> 
+                    <li>HPC - Hospital Praia da costa </li>
+                    <li>HSL - Hospital São Luiz</li>
+                    <li>HSF - Hospital São francisco</li>
+                </ul>
+                <h3 style="text-align: center;">Rotas MV</h3>
+                <br><br>
+                <ul>
+                    <li>/verzo/mv/ATENDIME</li>
+                    <li>/verzo/mv/CONFIG_UNIDADE</li>
+                    <li>/verzo/mv/CONVENIO</li>
+                    <li>/verzo/mv/EMPRESA_CON_PLA</li>
+                    <li>/verzo/mv/EMPRESA_PRODUTO</li>
+                    <li>/verzo/mv/ENT_PRO</li>
+                    <li>/verzo/mv/ESPECIE</li>
+                    <li>/verzo/mv/ESTOQUE</li>
+                    <li>/verzo/mv/GRU_PRO</li>
+                    <li>/verzo/mv/GRUPO_UNIDADE</li>
+                    <li>/verzo/mv/IMP_BRA</li>
+                    <li>/verzo/mv/ITREG_FAT</li>
+                    <li>/verzo/mv/ITREGRA</li>
+                    <li>/verzo/mv/LAB_PRO</li>
+                    <li>/verzo/mv/LOTE</li>
+                    <li>/verzo/mv/MULTI_EMPRESAS</li>
+                    <li>/verzo/mv/MVTO_ESTOQUE</li>
+                    <li>/verzo/mv/PRO_FAT</li>
+                    <li>/verzo/mv/PRODUTO</li>
+                    <li>/verzo/mv/REG_AMB</li>
+                    <li>/verzo/mv/REG_FAT</li>
+                    <li>/verzo/mv/REGRA_LANCAMENTO</li>
+                    <li>/verzo/mv/REGRA_SUBSTITUICAO_PROCED</li>
+                    <li>/verzo/mv/SETOR</li>
+                    <li>/verzo/mv/TAB_CONVENIO</li>
+                    <li>/verzo/mv/TAB_FAT</li>
+                    <li>/verzo/mv/TIP_DOC</li>
+                    <li>/verzo/mv/TUSS_OM</li>
+                    <li>/verzo/mv/TUSS</li>
+                    <li>/verzo/mv/UNI_PRO</li>
+                    <li>/verzo/mv/VAL_PRO</li>
+                </ul>
+                </p>
+            </section>
+            <section id="secao5" class="section">
+                <div class="highlight-header">
+                    <h1>TASY</h1>
+                    <hr />
+                </div>
+                <br>
+                <p>
+                    Como falado anteriormente nós temos endpoints tanto para MV quanto para o TASY, nós temos uma série
+                    de rotas, todas elas
+                    com o mesmo nome do SQL que nós foi informado anteriormente, então sempre que você estiver
+                    executando uma rota, estaremos executando
+                    a mesma query que foi fornecida anteiormente
+                <ul>
+                    <br><br>
+                    <h3 style="text-align: center;">Bases TASY</h3>
+                    <br><br>
+                    Você poderá escolher uma unidade específica que deseja bastando passar a sigla da unidade que deseja,
+                    abaixo estão todas as siglas de todoas as unidades integradas. 
+                    <br><br>
+                    <ul>
+                        <li>HSMC - Hospital São Matheus de Cuiabá</li>
+                        <li>HPM - Hospital Palmas Medical</li>
+                        <li>HSF- Hospital e Maternidade São Francisco de assis</li>
+                        <li>ENCORE - Hospital encore</li>
+                        <li>IRT - INSTITUTO DE RADIOTERAPIA</li>
+                    </ul>
+                    <h3 style="text-align: center;">Rotas TASY</h3>
+                    <br><br>
+                    <li>/verzo/tasy/BRASINDICE_PRECO</li>
+                    <li>/verzo/tasy/CATEGORIA_CONVENIO</li>
+                    <li>/verzo/tasy/CLASSE_MATERIAL</li>
+                    <li>/verzo/tasy/CONTA_PACIENTE</li>
+                    <li>/verzo/tasy/CONVENIO</li>
+                    <li>/verzo/tasy/CONVENIO_AMB</li>
+                    <li>/verzo/tasy/CONVENIO_BRASINDICE</li>
+                    <li>/verzo/tasy/CONVENIO_ESTABELECIMENTO</li>
+                    <li>/verzo/tasy/CONVENIO_PRECO_MAT</li>
+                    <li>/verzo/tasy/CONVENIO_SIMPRO</li>
+                    <li>/verzo/tasy/CONVERSAO_MATERIAL_CONVENIO</li>
+                    <li>/verzo/tasy/ESTABELECIMENTO</li>
+                    <li>/verzo/tasy/GRUPO_MATERIAL</li>
+                    <li>/verzo/tasy/KIT_MATERIAL</li>
+                    <li>/verzo/tasy/MATERIAL</li>
+                    <li>/verzo/tasy/MATERIAL_ATEND_PACIENTE</li>
+                    <li>/verzo/tasy/MATERIAL_BRASINDICE</li>
+                    <li>/verzo/tasy/MATERIAL_CONVERSAO_UNIDADE</li>
+                    <li>/verzo/tasy/MATERIAL_ESTAB</li>
+                    <li>/verzo/tasy/MATERIAL_REGRA_QT_FAT</li>
+                    <li>/verzo/tasy/MATERIAL_SIMPRO</li>
+                    <li>/verzo/tasy/MATERIAL_TUSS</li>
+                    <li>/verzo/tasy/MEDIC_FICHA_TECNICA</li>
+                    <li>/verzo/tasy/NATUREZA_OPERACAO</li>
+                    <li>/verzo/tasy/NOTA_FISCAL</li>
+                    <li>/verzo/tasy/NOTA_FISCAL_ITEM</li>
+                    <li>/verzo/tasy/OPERACAO_NOTA</li>
+                    <li>/verzo/tasy/PARAMETRO_FATURAMENTO</li>
+                    <li>/verzo/tasy/PRECO_MATERIAL</li>
+                    <li>/verzo/tasy/REGRA_BRASINDICE_PRECO</li>
+                    <li>/verzo/tasy/REGRA_CONVENIO_PLANO</li>
+                    <li>/verzo/tasy/SALDO_ESTOQUE</li>
+                    <li>/verzo/tasy/SIMPRO_PRECO</li>
+                    <li>/verzo/tasy/SUBGRUPO_MATERIAL</li>
+                    <li>/verzo/tasy/TABELA_PRECO_MATERIAL</li>
+                    <li>/verzo/tasy/TISS_TIPO_TABELA</li>
+                </ul>
+
+                </p>
+            </section>
+        </main>
+    </div>
+    <button id="backToTop" title="Voltar ao topo"><i class="fa-solid fa-up-long"></i></button>
+</body>
+
+</html>
