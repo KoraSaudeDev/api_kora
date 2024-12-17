@@ -45,8 +45,8 @@ TASY_DATABASES = [
 ]
 
 @verzo_bp.route('/', methods=['GET'])
-@token_required
-@permission_required(route_prefix='/verzo')
+# @token_required
+# @permission_required(route_prefix='/verzo')
 def home(*args, **kwargs):
     """
     Página inicial da API.
@@ -65,8 +65,8 @@ def home(*args, **kwargs):
     return send_from_directory(static_path, 'index.html')
 
 @verzo_bp.route('/docs', methods=['GET'])
-@token_required
-@permission_required(route_prefix='/verzo')
+# @token_required
+# @permission_required(route_prefix='/verzo')
 def verzo_page(*args, **kwargs):
     """
     Rota para exibir a página Verzo.
