@@ -29,9 +29,9 @@ def login():
     response.set_cookie(
         key="jwt_token",
         value=token,
-        httponly=True,  # Torna o cookie HttpOnly
-        secure=True,    # Garante que o cookie seja enviado apenas em conexões HTTPS
-        samesite="Strict",  # Restringe o envio do cookie apenas no mesmo site
-        max_age=3600  # Define o tempo de expiração do cookie (em segundos)
+        httponly=True,  
+        secure=True,   
+        samesite="Strict",  
+        max_age=3600  
     )
     return response

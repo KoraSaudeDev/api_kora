@@ -1,6 +1,6 @@
 from flask import Flask
 from flasgger import Swagger
-from flask_cors import CORS  # Importação do CORS
+from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
 from app.controllers.verzo_controller import verzo_bp
 from app.controllers.route_controller import route_bp
@@ -11,7 +11,7 @@ from app.controllers.user_controller import user_bp
 app = Flask(__name__)
 
 # Configurando CORS para aceitar qualquer origem temporariamente
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
 
 # Configuração do Swagger
 template = {
