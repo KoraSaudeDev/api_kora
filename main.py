@@ -73,4 +73,4 @@ def home():
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3793, debug=(ENV == "development"))
+    app.run(host="0.0.0.0", port=3792, debug=(ENV == "development"))
