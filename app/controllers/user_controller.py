@@ -19,22 +19,73 @@ def validate_json_fields(data, required_fields):
 @admin_required
 @permission_required(route_prefix='/users')
 def create_user(user_data):
+    """
+    Cria um novo usuário no sistema.
+    ---
+    tags:
+      - Users
+    parameters:
+      - name: body
+        in: body
+        required: true
+        schema:
+          type: object
+          required:
+            - username
+            - password
+            - is_admin
+          properties:
+            username:
+              type: string
+              example: "username"
+            password:
+              type: string
+              example: "senha"
+            is_admin:
+              type: boolean
+              example: true
+    responses:
+      201:
+        description: Usuário criado com sucesso.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            user_id:
+              type: integer
+              example: 1
+      400:
+        description: Campos obrigatórios ausentes ou inválidos.
+      500:
+        description: Erro interno no servidor.
+    """
     try:
         data = request.json
-        is_valid, message = validate_json_fields(data, ["username", "password"])
+        is_valid, message = validate_json_fields(data, ["username", "password", "is_admin"])
         if not is_valid:
             return jsonify({"status": "error", "message": message}), 400
 
         username = data["username"]
-        password_hash = bcrypt.hashpw(data["password"].encode('utf-8'), bcrypt.gensalt())
+        password = data["password"]
+        is_admin = data["is_admin"]
+
+        # Hash da senha
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
         with create_db_connection_mysql() as conn:
             with conn.cursor() as cursor:
-                cursor.execute("INSERT INTO users (username, password_hash) VALUES (%s, %s)", 
-                               (username, password_hash))
+                # Inserir o novo usuário
+                cursor.execute(
+                    "INSERT INTO users (username, password_hash, is_admin, is_active) VALUES (%s, %s, %s, %s)",
+                    (username, password_hash, is_admin, True)
+                )
+                # Obter o ID do usuário recém-criado
+                user_id = cursor.lastrowid
             conn.commit()
 
-        return jsonify({"status": "success", "message": "Usuário criado com sucesso"}), 201
+        return jsonify({"status": "success", "message": "Usuário criado com sucesso", "user_id": user_id}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -370,13 +421,13 @@ def update_routes(user_data):
 @admin_required
 def list_users_with_routes(user_data):
     """
-    Lista todos os usuários e suas rotas associadas.
+    Lista todos os usuários, suas rotas associadas e se são administradores.
     ---
     tags:
       - Users
     responses:
       200:
-        description: Lista de usuários com suas rotas.
+        description: Lista de usuários com suas rotas e status de administrador.
         schema:
           type: array
           items:
@@ -388,6 +439,9 @@ def list_users_with_routes(user_data):
               username:
                 type: string
                 example: "john_doe"
+              is_admin:
+                type: boolean
+                example: true
               routes:
                 type: array
                 items:
@@ -400,11 +454,12 @@ def list_users_with_routes(user_data):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Query para buscar todos os usuários e suas rotas
+        # Query para buscar todos os usuários, suas rotas e status de administrador
         query = """
             SELECT 
                 u.id AS user_id, 
                 u.username, 
+                u.is_admin,
                 GROUP_CONCAT(r.route_prefix) AS routes
             FROM users u
             LEFT JOIN user_routes ur ON u.id = ur.user_id
@@ -421,6 +476,7 @@ def list_users_with_routes(user_data):
             response.append({
                 "id": user["user_id"],
                 "username": user["username"],
+                "is_admin": bool(user["is_admin"]),
                 "routes": user["routes"].split(",") if user["routes"] else []
             })
 
