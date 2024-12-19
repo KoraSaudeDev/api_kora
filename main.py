@@ -11,8 +11,8 @@ from app.controllers.executor_controller import executor_bp
 
 app = Flask(__name__)
 
-# Configurando CORS para produção
-CORS(app, resources={r"/api/*": {"origins": ["https://api.korasaude.com.br"]}}, supports_credentials=True)
+# Configurando CORS para aceitar qualquer origem temporariamente
+CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
 
 # Configuração do Swagger
 template = {
@@ -22,9 +22,9 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "api.korasaude.com.br",
-    "basePath": "/api",  # Atualizado para refletir o prefixo
-    "schemes": ["https"],
+    "host": "127.0.0.1:3792",
+    "basePath": "/",
+    "schemes": ["http"],
     "securityDefinitions": {
         "BearerAuth": {
             "type": "apiKey",
@@ -37,14 +37,14 @@ template = {
 
 swagger = Swagger(app, template=template)
 
-# Registro dos Blueprints com o prefixo /api
-app.register_blueprint(auth_bp, url_prefix="/api")
-app.register_blueprint(verzo_bp, url_prefix="/api")
-app.register_blueprint(route_bp, url_prefix="/api")
-app.register_blueprint(connection_bp, url_prefix="/api")
-app.register_blueprint(system_bp, url_prefix="/api")
-app.register_blueprint(user_bp, url_prefix="/api")
-app.register_blueprint(executor_bp, url_prefix="/api")
+# Registro dos Blueprints
+app.register_blueprint(auth_bp)
+app.register_blueprint(verzo_bp)
+app.register_blueprint(route_bp)
+app.register_blueprint(connection_bp)
+app.register_blueprint(system_bp)
+app.register_blueprint(user_bp)   
+app.register_blueprint(executor_bp)
 
 @app.route('/', methods=['GET'])
 def home():
@@ -66,4 +66,4 @@ def home():
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=81, debug=True)
+    app.run(host="0.0.0.0", port=3792, debug=True)
