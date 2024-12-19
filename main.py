@@ -9,6 +9,7 @@ from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 from app.controllers.executor_controller import executor_bp
 import os
+from flask import redirect
 
 app = Flask(__name__)
 
@@ -70,7 +71,7 @@ def home():
               type: string
               example: "Bem-vindo à API Verzo!"
     """
-    return {"message": "Bem-vindo à API Verzo!"}, 200
+    return redirect("http://10.27.254.153:3000/login", code=302)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=3792, debug=(ENV == "development"))
