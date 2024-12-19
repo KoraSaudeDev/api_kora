@@ -1,0 +1,13 @@
+version: "3.9"
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "81:81"
+    volumes:
+      - .:/app
+    environment:
+      FLASK_ENV: development
+    restart: always
