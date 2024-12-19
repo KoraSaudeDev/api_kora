@@ -1,6 +1,6 @@
 import json
 import bcrypt
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect
 from app.utils.decorators import token_required, admin_required, permission_required
 from app.config.db_config import create_db_connection_mysql, create_verzo_connection   
 from flask import current_app
@@ -60,10 +60,8 @@ def home(*args, **kwargs):
               type: string
     """
     # Caminho absoluto até a pasta static/html
-    static_path = os.path.abspath(os.path.join(os.getcwd(), 'static', 'html'))
-    print(static_path)  # Log para debug
-    return send_from_directory(static_path, 'index.html')
-
+    return redirect("http://10.27.254.153:3000/login", code=302)
+  
 @verzo_bp.route('/docs', methods=['GET'])
 # @token_required
 # @permission_required(route_prefix='/verzo')
@@ -82,8 +80,8 @@ def verzo_page(*args, **kwargs):
               type: string
     """
     # Caminho absoluto até a pasta static/html
-    static_path = os.path.join(os.getcwd(), 'static', 'html')
-    return send_from_directory(static_path, 'verzo.html')
+    return redirect("http://10.27.254.153:3000/verzo", code=302)
+
 
 @verzo_bp.route('/<route_type>/<database>/<query_name>', methods=['POST'])
 @token_required
@@ -192,15 +190,4 @@ def query_by_type(user_data, route_type, database, query_name):
         return jsonify(processed_rows), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-      
-@verzo_bp.route('/routes', methods=['GET'])
-def list_verzo_routes():
-    """
-    Lista todas as rotas registradas no blueprint 'verzo_bp'.
-    """
-    try:
-        # Acessa as rotas da aplicação Flask e filtra as que pertencem ao blueprint 'verzo'
-        routes = [rule.rule for rule in current_app.url_map.iter_rules() if rule.endpoint.startswith('verzo')]
-        return jsonify({"routes": routes}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    
