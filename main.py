@@ -8,12 +8,19 @@ from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 from app.controllers.executor_controller import executor_bp
+import os
 
 app = Flask(__name__)
 
-# Configurando CORS para aceitar qualquer origem temporariamente
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
+# Detecta o ambiente atual (pode ser configurado via variáveis de ambiente)
+ENV = os.getenv("FLASK_ENV", "production")
 
+# Configurando CORS baseado no ambiente
+if ENV == "development":
+    CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
+else:  # Ambiente de produção
+    CORS(app, resources={r"/*": {"origins": ["http://10.27.254.153"]}}, supports_credentials=True)
+    
 # Configuração do Swagger
 template = {
     "swagger": "2.0",
@@ -22,7 +29,7 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "127.0.0.1:3792",
+    "host": "127.0.0.1:3793",
     "basePath": "/",
     "schemes": ["http"],
     "securityDefinitions": {
@@ -43,7 +50,7 @@ app.register_blueprint(verzo_bp)
 app.register_blueprint(route_bp)
 app.register_blueprint(connection_bp)
 app.register_blueprint(system_bp)
-app.register_blueprint(user_bp)   
+app.register_blueprint(user_bp)
 app.register_blueprint(executor_bp)
 
 @app.route('/', methods=['GET'])
@@ -66,4 +73,4 @@ def home():
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3793, debug=True)
+    app.run(host="0.0.0.0", port=3793, debug=(ENV == "development"))
