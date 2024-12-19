@@ -2,6 +2,7 @@ import os
 from flask import Blueprint, request, jsonify
 from app.utils.decorators import token_required, admin_required
 from app.config.db_config import create_db_connection_mysql
+import cx_Oracle
 
 system_bp = Blueprint('systems', __name__, url_prefix='/systems')
 
@@ -297,105 +298,5 @@ def add_connections_to_system(user_data):
             "message": "Conexões adicionadas com sucesso.",
             "added_connections": added_connections
         }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@system_bp.route('/executors/create', methods=['POST'])
-@token_required
-@admin_required
-def create_executor(user_data):
-    """
-    Cria um executor para um sistema e salva a query em um arquivo .sql.
-    ---
-    tags:
-      - Executors
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - system_id
-            - connection_ids
-            - name
-            - query
-          properties:
-            system_id:
-              type: integer
-              example: 1
-            connection_ids:
-              type: array
-              items:
-                type: integer
-              example: [1, 2]
-            name:
-              type: string
-              example: "ATENDIME"
-            query:
-              type: string
-              example: "SELECT * FROM atendimentos WHERE data >= '2024-01-01';"
-    responses:
-      201:
-        description: Executor criado com sucesso e arquivo salvo.
-      400:
-        description: Campos obrigatórios ausentes ou inválidos.
-      500:
-        description: Erro interno no servidor.
-    """
-    import os
-
-    try:
-        data = request.json
-        system_id = data.get("system_id")
-        connection_ids = data.get("connection_ids")
-        name = data.get("name")
-        query = data.get("query")
-
-        # Validação dos campos
-        if not all([system_id, connection_ids, name, query]):
-            return jsonify({"status": "error", "message": "Todos os campos são obrigatórios."}), 400
-
-        # Conexão com o banco para validar o System
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT name FROM systems WHERE id = %s", (system_id,))
-        system = cursor.fetchone()
-
-        if not system:
-            return jsonify({"status": "error", "message": "System não encontrado."}), 404
-
-        system_name = system["name"]
-
-        # Criar a pasta se não existir
-        system_folder = os.path.join("app", "queries", system_name)
-        if not os.path.exists(system_folder):
-            os.makedirs(system_folder)
-
-        # Caminho completo do arquivo
-        file_path = os.path.join(system_folder, f"{name}.sql")
-
-        # Salvar o arquivo .sql
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(query)
-
-        # Salvar no banco de dados
-        connection_ids_str = ",".join(map(str, connection_ids))
-        query_insert = """
-            INSERT INTO executors (system_id, connection_ids, name, file_path)
-            VALUES (%s, %s, %s, %s)
-        """
-        cursor.execute(query_insert, (system_id, connection_ids_str, name, file_path))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({
-            "status": "success",
-            "message": "Executor criado com sucesso e arquivo salvo.",
-            "file_path": file_path
-        }), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

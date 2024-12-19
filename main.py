@@ -7,6 +7,7 @@ from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
+from app.controllers.executor_controller import executor_bp
 
 app = Flask(__name__)
 
@@ -43,6 +44,7 @@ app.register_blueprint(route_bp)
 app.register_blueprint(connection_bp)
 app.register_blueprint(system_bp)
 app.register_blueprint(user_bp)   
+app.register_blueprint(executor_bp)
 
 @app.route('/', methods=['GET'])
 def home():

@@ -77,18 +77,64 @@ def edit_user(user_data, user_id):
 @admin_required
 @permission_required(route_prefix='/users')
 def delete_user(user_data, user_id):
-
+    """
+    Realiza o soft delete de um usuário e remove os vínculos com as rotas.
+    """
     try:
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        # Verificar se o usuário existe
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"status": "error", "message": "Usuário não encontrado."}), 404
+
+        # Realizar o soft delete
+        query_soft_delete = "UPDATE users SET is_active = FALSE WHERE id = %s"
+        cursor.execute(query_soft_delete, (user_id,))
+
+        # Remover vínculos com as rotas
+        query_remove_routes = "DELETE FROM user_routes WHERE user_id = %s"
+        cursor.execute(query_remove_routes, (user_id,))
+
         conn.commit()
 
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "message": "Usuário excluído com sucesso"}), 200
+        return jsonify({"status": "success", "message": "Usuário desativado e vínculos removidos com sucesso."}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@user_bp.route('/restore/<int:user_id>', methods=['PUT'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/users')
+def restore_user(user_data, user_id):
+    """
+    Restaura um usuário desativado (soft delete).
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor()
+
+        # Verificar se o usuário existe
+        cursor.execute("SELECT * FROM users WHERE id = %s AND is_active = FALSE", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"status": "error", "message": "Usuário não encontrado ou já ativo."}), 404
+
+        # Restaurar o usuário
+        query_restore = "UPDATE users SET is_active = TRUE WHERE id = %s"
+        cursor.execute(query_restore, (user_id,))
+
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "message": "Usuário restaurado com sucesso."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -316,5 +362,71 @@ def update_routes(user_data):
         conn.close()
 
         return jsonify({"status": "success", "message": "Rotas atualizadas com sucesso."}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@user_bp.route('/list', methods=['GET'])
+@token_required
+@admin_required
+def list_users_with_routes(user_data):
+    """
+    Lista todos os usuários e suas rotas associadas.
+    ---
+    tags:
+      - Users
+    responses:
+      200:
+        description: Lista de usuários com suas rotas.
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              username:
+                type: string
+                example: "john_doe"
+              routes:
+                type: array
+                items:
+                  type: string
+                example: ["/home", "/settings", "/dashboard"]
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query para buscar todos os usuários e suas rotas
+        query = """
+            SELECT 
+                u.id AS user_id, 
+                u.username, 
+                GROUP_CONCAT(r.route_prefix) AS routes
+            FROM users u
+            LEFT JOIN user_routes ur ON u.id = ur.user_id
+            LEFT JOIN routes r ON ur.route_id = r.id
+            GROUP BY u.id
+            ORDER BY u.username
+        """
+        cursor.execute(query)
+        users = cursor.fetchall()
+
+        # Formatando a resposta
+        response = []
+        for user in users:
+            response.append({
+                "id": user["user_id"],
+                "username": user["username"],
+                "routes": user["routes"].split(",") if user["routes"] else []
+            })
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "users": response}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

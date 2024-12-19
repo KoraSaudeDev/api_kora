@@ -60,6 +60,53 @@ def create_route(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@route_bp.route('/list', methods=['GET'])
+@token_required
+@admin_required
+def list_routes(user_data):
+    """
+    Lista todas as rotas existentes.
+    ---
+    tags:
+      - Routes
+    responses:
+      200:
+        description: Lista de rotas.
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              route_prefix:
+                type: string
+                example: "/minha/rota"
+              description:
+                type: string
+                example: "Descrição da rota"
+              created_at:
+                type: string
+                format: date-time
+    500:
+      description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT id, route_prefix, description FROM routes"
+        cursor.execute(query)
+        routes = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "routes": routes}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @route_bp.route('/edit/<int:route_id>', methods=['PUT'])
 @token_required
 @admin_required

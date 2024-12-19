@@ -103,7 +103,6 @@ def create_connection(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @connection_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
@@ -137,7 +136,6 @@ def list_connections(user_data):
         return jsonify({"status": "success", "connections": connections}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required

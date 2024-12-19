@@ -50,11 +50,41 @@ def login():
             message:
               type: string
               example: "Usuário ou senha inválidos"
+      403:
+        description: Conta inativa.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "error"
+            message:
+              type: string
+              example: "Conta inativa. Entre em contato com o administrador."
       500:
         description: Erro interno no servidor.
     """
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-    response = AuthService.login(username, password)
-    return jsonify(response), response.get("status_code", 200)
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+
+        # Verificar se o username e a senha foram fornecidos
+        if not username or not password:
+            return jsonify({"status": "error", "message": "Usuário e senha são obrigatórios"}), 400
+
+        # Chamar o serviço de autenticação
+        response = AuthService.login(username, password)
+
+        # Verificar se o campo `is_active` está ativo (1)
+        if response.get("is_active") == 0:
+            return jsonify({
+                "status": "error",
+                "message": "Conta inativa. Entre em contato com o administrador."
+            }), 403
+
+        # Retornar o token ou outro erro dependendo da resposta
+        return jsonify(response), response.get("status_code", 200)
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
