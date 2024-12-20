@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.services.auth_service import AuthService
+from app.utils.decorators import token_required
 
 # Definição do Blueprint
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -86,5 +87,36 @@ def login():
         # Retornar o token ou outro erro dependendo da resposta
         return jsonify(response), response.get("status_code", 200)
 
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+      
+@auth_bp.route('/logout', methods=['POST'])
+@token_required
+def logout(user_data):
+    """
+    Realiza o logout do usuário.
+    ---
+    tags:
+      - Autenticação
+    responses:
+      200:
+        description: Logout bem-sucedido.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            message:
+              type: string
+              example: "Logout realizado com sucesso."
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        return jsonify({
+            "status": "success",
+            "message": "Logout realizado com sucesso."
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
