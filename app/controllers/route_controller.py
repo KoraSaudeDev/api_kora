@@ -161,7 +161,7 @@ def list_routes(user_data):
 @admin_required
 def edit_route(user_data, route_id):
     """
-    Edita o nome de uma rota existente.
+    Edita uma rota existente com base no ID fornecido.
     ---
     tags:
       - Routes
@@ -177,17 +177,18 @@ def edit_route(user_data, route_id):
         required: true
         schema:
           type: object
-          required:
-            - name
           properties:
-            name:
+            route_prefix:
               type: string
-              example: "/rota/atualizada"
+              example: "/nova/rota"
+            description:
+              type: string
+              example: "Descrição da nova rota"
     responses:
       200:
-        description: Nome da rota atualizado com sucesso.
+        description: Rota atualizada com sucesso.
       400:
-        description: Campo obrigatório ausente.
+        description: Nenhum dado para atualizar ou valor duplicado.
       404:
         description: Rota não encontrada.
       500:
@@ -195,16 +196,14 @@ def edit_route(user_data, route_id):
     """
     try:
         data = request.json
-        new_name = data.get("name")
 
-        if not new_name:
-            return jsonify({"status": "error", "message": "Campo 'name' é obrigatório."}), 400
-
+        # Conectar ao banco e buscar os dados existentes da rota
         conn = create_db_connection_mysql()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
-        # Verificar se a rota existe
-        cursor.execute("SELECT * FROM routes WHERE id = %s", (route_id,))
+        # Obter os valores existentes da rota
+        query_get_route = "SELECT route_prefix, description FROM routes WHERE id = %s"
+        cursor.execute(query_get_route, (route_id,))
         route = cursor.fetchone()
 
         if not route:
@@ -212,17 +211,40 @@ def edit_route(user_data, route_id):
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Atualizar o nome da rota
-        query = "UPDATE routes SET name = %s WHERE id = %s"
-        cursor.execute(query, (new_name, route_id))
+        # Use os valores existentes se os novos não forem fornecidos
+        route_prefix = data.get("route_prefix", route["route_prefix"])
+        description = data.get("description", route["description"])
+
+        # Verificar se o novo route_prefix já existe para outra rota
+        if route_prefix != route["route_prefix"]:
+            query_check_duplicate = "SELECT id FROM routes WHERE route_prefix = %s AND id != %s"
+            cursor.execute(query_check_duplicate, (route_prefix, route_id))
+            duplicate = cursor.fetchone()
+            if duplicate:
+                cursor.close()
+                conn.close()
+                return jsonify({
+                    "status": "error",
+                    "message": f"O route_prefix '{route_prefix}' já está em uso por outra rota."
+                }), 400
+
+        # Atualizar os valores da rota no banco
+        query_update = """
+            UPDATE routes
+            SET route_prefix = %s, description = %s
+            WHERE id = %s
+        """
+        cursor.execute(query_update, (route_prefix, description, route_id))
         conn.commit()
 
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "message": "Nome da rota atualizado com sucesso."}), 200
+        return jsonify({"status": "success", "message": "Rota atualizada com sucesso."}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @route_bp.route('/me', methods=['GET'])
 @token_required
