@@ -232,22 +232,83 @@ def execute_query(user_data, executor_id):
 @admin_required
 def list_executors(user_data):
     """
-    Lista todos os executores com detalhes, incluindo nomes de sistemas e conexões.
+    Lista todos os executores com detalhes, incluindo nomes de sistemas e conexões, com suporte à paginação.
     ---
     tags:
       - Executors
+    parameters:
+      - name: page
+        in: query
+        required: false
+        type: integer
+        description: Número da página para a paginação. Default: 1
+        example: 1
+      - name: limit
+        in: query
+        required: false
+        type: integer
+        description: Número de registros por página. Default: 10
+        example: 10
     responses:
       200:
         description: Lista de executores com detalhes.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            total:
+              type: integer
+              example: 50
+            executors:
+              type: array
+              items:
+                type: object
+                properties:
+                  executor_id:
+                    type: integer
+                    example: 1
+                  executor_name:
+                    type: string
+                    example: "Executor 1"
+                  system_name:
+                    type: string
+                    example: "Sistema X"
+                  connections:
+                    type: array
+                    items:
+                      type: string
+                      example: "Conexão 1"
+                  file_path:
+                    type: string
+                    example: "/path/to/file.sql"
+                  created_at:
+                    type: string
+                    example: "2024-01-01 00:00:00"
+                  executed_at:
+                    type: string
+                    example: "2024-01-02 00:00:00"
       500:
         description: Erro ao buscar os dados.
     """
     try:
+        # Obter os parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar informações dos executores com joins para trazer os nomes
-        query = """
+        # Buscar informações dos executores com paginação
+        query = f"""
             SELECT 
                 e.id AS executor_id,
                 e.name AS executor_name,
@@ -261,9 +322,15 @@ def list_executors(user_data):
             LEFT JOIN connections c ON FIND_IN_SET(c.id, e.connection_ids)
             GROUP BY e.id
             ORDER BY e.created_at DESC
+            LIMIT {limit} OFFSET {offset}
         """
         cursor.execute(query)
         executors = cursor.fetchall()
+
+        # Contar o total de executores
+        count_query = "SELECT COUNT(*) AS total FROM executors"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
 
         cursor.close()
         conn.close()
@@ -281,6 +348,12 @@ def list_executors(user_data):
                 "executed_at": executor["executed_at"] if executor["executed_at"] else "Nunca executado"
             })
 
-        return jsonify({"status": "success", "executors": response}), 200
+        return jsonify({
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "executors": response
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
