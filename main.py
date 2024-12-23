@@ -51,11 +51,11 @@ swagger = Swagger(app, template=template)
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
-app.register_blueprint(route_bp, url_prefix="/api/route")
-app.register_blueprint(connection_bp, url_prefix="/api/connection")
-app.register_blueprint(system_bp, url_prefix="/api/system")
+app.register_blueprint(route_bp, url_prefix="/api/routes")
+app.register_blueprint(connection_bp, url_prefix="/api/connections")
+app.register_blueprint(system_bp, url_prefix="/api/systems")
 app.register_blueprint(user_bp, url_prefix="/api/users")
-app.register_blueprint(executor_bp, url_prefix="/api/executor")
+app.register_blueprint(executor_bp, url_prefix="/api/executors")
 
 @app.route('/api', methods=['GET'])
 def home():
