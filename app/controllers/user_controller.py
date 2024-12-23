@@ -410,6 +410,114 @@ def update_routes(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@user_bp.route('/list', methods=['GET'])
+@token_required
+@admin_required
+def list_users_with_routes(user_data):
+    """
+    Lista todos os usuários, suas rotas associadas, status de administrador e ativo/inativo, com suporte à paginação.
+    ---
+    tags:
+      - Users
+    parameters:
+      - name: page
+        in: query
+        required: false
+        type: integer
+        description: Número da página para a paginação. Default: 1
+        example: 1
+      - name: limit
+        in: query
+        required: false
+        type: integer
+        description: Número de registros por página. Default: 10
+        example: 10
+    responses:
+      200:
+        description: Lista de usuários com suas rotas, status de administrador e ativo/inativo.
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                example: 1
+              username:
+                type: string
+                example: "john_doe"
+              is_admin:
+                type: boolean
+                example: true
+              is_active:
+                type: boolean
+                example: true
+              routes:
+                type: array
+                items:
+                  type: string
+                example: ["/home", "/settings", "/dashboard"]
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        # Obter os parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query para buscar os usuários com paginação
+        query = f"""
+            SELECT 
+                u.id AS user_id, 
+                u.username, 
+                u.is_admin,
+                u.is_active,
+                GROUP_CONCAT(r.route_prefix) AS routes
+            FROM users u
+            LEFT JOIN user_routes ur ON u.id = ur.user_id
+            LEFT JOIN routes r ON ur.route_id = r.id
+            GROUP BY u.id
+            ORDER BY u.username
+            LIMIT {limit} OFFSET {offset}
+        """
+        cursor.execute(query)
+        users = cursor.fetchall()
+
+        # Query para obter a contagem total de usuários
+        count_query = "SELECT COUNT(*) AS total FROM users"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
+
+        # Formatando a resposta
+        response = []
+        for user in users:
+            response.append({
+                "id": user["user_id"],
+                "username": user["username"],
+                "is_admin": bool(user["is_admin"]),
+                "is_active": bool(user["is_active"]),
+                "routes": user["routes"].split(",") if user["routes"] else []
+            })
+
+        cursor.close()
+        conn.close()
+
+        # Retornar a resposta com paginação
+        return jsonify({
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "users": response
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @user_bp.route('/me', methods=['GET'])
 @token_required
 def get_user_profile(user_data):
@@ -498,6 +606,7 @@ def get_user_profile(user_data):
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+      
       
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
