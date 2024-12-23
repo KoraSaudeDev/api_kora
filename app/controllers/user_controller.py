@@ -368,10 +368,10 @@ def update_routes(user_data):
     try:
         data = request.json
         user_id = data.get("user_id")
-        new_route_ids = data.get("new_route_ids")
+        route_ids = data.get("route_ids")
 
-        if not user_id or not new_route_ids:
-            return jsonify({"status": "error", "message": "Campos 'user_id' e 'new_route_ids' são obrigatórios."}), 400
+        if not user_id or not route_ids:
+            return jsonify({"status": "error", "message": "Campos 'user_id' e 'route_ids' são obrigatórios."}), 400
 
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
@@ -386,7 +386,7 @@ def update_routes(user_data):
         existing_route_ids = {row['route_id'] for row in cursor.fetchall()}
 
         # Identificar as rotas novas que ainda não estão associadas
-        new_routes_to_add = [route_id for route_id in new_route_ids if route_id not in existing_route_ids]
+        new_routes_to_add = [route_id for route_id in route_ids if route_id not in existing_route_ids]
 
         # Inserir apenas as novas rotas
         for route_id in new_routes_to_add:
