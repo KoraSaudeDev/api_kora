@@ -486,3 +486,92 @@ def list_users_with_routes(user_data):
         return jsonify({"status": "success", "users": response}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@user_bp.route('/me', methods=['GET'])
+@token_required
+def get_user_profile(user_data):
+    """
+    Retorna os dados do usuário ativo e suas rotas associadas.
+    ---
+    tags:
+      - Users
+    responses:
+      200:
+        description: Dados do usuário ativo.
+        schema:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 1
+            username:
+              type: string
+              example: "john_doe"
+            is_admin:
+              type: boolean
+              example: true
+            routes:
+              type: array
+              items:
+                type: string
+              example: ["/home", "/settings", "/dashboard"]
+      404:
+        description: Usuário não encontrado.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "error"
+            message:
+              type: string
+              example: "Usuário não encontrado."
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        user_id = user_data['id']  # Obtém o ID do usuário ativo a partir do token
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Obter informações do usuário ativo
+        user_query = """
+            SELECT id, username, is_admin
+            FROM users
+            WHERE id = %s AND is_active = 1
+        """
+        cursor.execute(user_query, (user_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Usuário não encontrado."}), 404
+
+        # Obter as rotas associadas ao usuário
+        routes_query = """
+            SELECT r.route_prefix
+            FROM routes r
+            JOIN user_routes ur ON r.id = ur.route_id
+            WHERE ur.user_id = %s
+        """
+        cursor.execute(routes_query, (user_id,))
+        routes = [row['route_prefix'] for row in cursor.fetchall()]
+
+        cursor.close()
+        conn.close()
+
+        # Retornar os dados do usuário com as rotas associadas
+        return jsonify({
+            "status": "success",
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "is_admin": bool(user["is_admin"]),
+                "routes": routes
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500

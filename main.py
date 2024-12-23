@@ -54,7 +54,7 @@ app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
 app.register_blueprint(route_bp, url_prefix="/api/route")
 app.register_blueprint(connection_bp, url_prefix="/api/connection")
 app.register_blueprint(system_bp, url_prefix="/api/system")
-app.register_blueprint(user_bp, url_prefix="/api/user")
+app.register_blueprint(user_bp, url_prefix="/api/users")
 app.register_blueprint(executor_bp, url_prefix="/api/executor")
 
 @app.route('/api', methods=['GET'])
@@ -77,4 +77,4 @@ def home():
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=3792, debug=True)
