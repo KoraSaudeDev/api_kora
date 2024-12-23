@@ -189,41 +189,6 @@ def restore_user(user_data, user_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@user_bp.route('/change-password/<int:user_id>', methods=['PUT'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/users')
-def change_user_password(user_data, user_id):
-    try:
-        data = request.json
-        new_password = data.get('new_password')
-
-        if not new_password:
-            return jsonify({"status": "error", "message": "Nova senha é obrigatória"}), 400
-
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-        target_user = cursor.fetchone()
-
-        if not target_user:
-            return jsonify({"status": "error", "message": "Usuário alvo não encontrado"}), 404
-
-        if user_data['id'] != user_id and target_user['is_admin']:
-            return jsonify({"status": "error", "message": "Não é permitido alterar a senha de outro administrador"}), 403
-
-        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-        cursor.execute("UPDATE users SET password_hash = %s WHERE id = %s", (password_hash, user_id))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "message": "Senha alterada com sucesso"}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 @user_bp.route('/routes/assign', methods=['POST'])
 @token_required
 @admin_required
@@ -294,59 +259,44 @@ def assign_routes(user_data):
 @admin_required
 def remove_routes(user_data):
     """
-    Remove rotas de um usuário.
+    Remove todas as rotas de um usuário.
     ---
     tags:
       - Users
     parameters:
-      - name: body
-        in: body
+      - name: user_id
+        in: query
         required: true
-        schema:
-          type: object
-          required:
-            - user_id
-            - route_ids
-          properties:
-            user_id:
-              type: integer
-              example: 1
-            route_ids:
-              type: array
-              items:
-                type: integer
-              example: [1, 2]
+        type: integer
+        description: ID do usuário cujas rotas serão removidas.
+        example: 1
     responses:
       200:
-        description: Rotas removidas com sucesso.
+        description: Todas as rotas removidas com sucesso.
       400:
-        description: Campos obrigatórios ausentes ou inválidos.
+        description: Campo 'user_id' ausente.
       500:
         description: Erro interno no servidor.
     """
     try:
-        data = request.json
-        user_id = data.get("user_id")
-        route_ids = data.get("route_ids")
+        # Obter o ID do usuário da query string
+        user_id = request.args.get("user_id", type=int)
 
-        if not user_id or not route_ids:
-            return jsonify({"status": "error", "message": "Campos 'user_id' e 'route_ids' são obrigatórios."}), 400
+        if not user_id:
+            return jsonify({"status": "error", "message": "Campo 'user_id' é obrigatório."}), 400
 
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
 
-        for route_id in route_ids:
-            query = """
-                DELETE FROM user_routes
-                WHERE user_id = %s AND route_id = %s
-            """
-            cursor.execute(query, (user_id, route_id))
+        # Remover todos os vínculos de rotas para o usuário
+        query = "DELETE FROM user_routes WHERE user_id = %s"
+        cursor.execute(query, (user_id,))
 
         conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "message": "Rotas removidas com sucesso."}), 200
+        return jsonify({"status": "success", "message": f"Todas as rotas foram removidas para o usuário com ID {user_id}."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -355,7 +305,7 @@ def remove_routes(user_data):
 @admin_required
 def update_routes(user_data):
     """
-    Atualiza as rotas de um usuário.
+    Atualiza as rotas de um usuário, adicionando novas rotas sem remover as existentes.
     ---
     tags:
       - Users
@@ -376,7 +326,7 @@ def update_routes(user_data):
               type: array
               items:
                 type: integer
-              example: [2, 3]
+              example: [3]
     responses:
       200:
         description: Rotas atualizadas com sucesso.
@@ -396,12 +346,20 @@ def update_routes(user_data):
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
 
-        # Remover todas as rotas existentes
-        query_delete = "DELETE FROM user_routes WHERE user_id = %s"
-        cursor.execute(query_delete, (user_id,))
+        # Buscar as rotas já existentes do usuário
+        query_existing_routes = """
+            SELECT route_id
+            FROM user_routes
+            WHERE user_id = %s
+        """
+        cursor.execute(query_existing_routes, (user_id,))
+        existing_route_ids = {row['route_id'] for row in cursor.fetchall()}
 
-        # Inserir as novas rotas
-        for route_id in new_route_ids:
+        # Identificar as rotas novas que ainda não estão associadas
+        new_routes_to_add = [route_id for route_id in new_route_ids if route_id not in existing_route_ids]
+
+        # Inserir apenas as novas rotas
+        for route_id in new_routes_to_add:
             query_insert = """
                 INSERT INTO user_routes (user_id, route_id)
                 VALUES (%s, %s)
@@ -412,7 +370,12 @@ def update_routes(user_data):
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "message": "Rotas atualizadas com sucesso."}), 200
+        return jsonify({
+            "status": "success",
+            "message": "Rotas atualizadas com sucesso.",
+            "added_routes": new_routes_to_add,
+            "existing_routes": list(existing_route_ids)
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
