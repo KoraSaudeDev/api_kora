@@ -283,7 +283,7 @@ def get_user_routes(user_data):
 @admin_required
 def get_routes_by_user_id(user_data, user_id):
     """
-    Retorna as rotas associadas a um usuário específico com base no ID fornecido.
+    Retorna os IDs das rotas associadas a um usuário específico com base no ID fornecido.
     ---
     tags:
       - Routes
@@ -296,18 +296,18 @@ def get_routes_by_user_id(user_data, user_id):
         example: 1
     responses:
       200:
-        description: Rotas associadas ao usuário.
+        description: IDs das rotas associadas ao usuário.
         schema:
           type: object
           properties:
             status:
               type: string
               example: "success"
-            routes:
+            route_ids:
               type: array
               items:
-                type: string
-              example: ["/dashboard", "/settings"]
+                type: integer
+              example: [1, 2, 3]
       404:
         description: Usuário não encontrado ou sem rotas associadas.
       500:
@@ -317,17 +317,17 @@ def get_routes_by_user_id(user_data, user_id):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar rotas associadas ao usuário
+        # Buscar IDs das rotas associadas ao usuário
         query_routes = """
-            SELECT r.route_prefix
+            SELECT r.id
             FROM routes r
             JOIN user_routes ur ON r.id = ur.route_id
             WHERE ur.user_id = %s
         """
         cursor.execute(query_routes, (user_id,))
-        routes = [row["route_prefix"] for row in cursor.fetchall()]
+        route_ids = [row["id"] for row in cursor.fetchall()]
 
-        if not routes:
+        if not route_ids:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Usuário não encontrado ou sem rotas associadas."}), 404
@@ -335,8 +335,8 @@ def get_routes_by_user_id(user_data, user_id):
         cursor.close()
         conn.close()
 
-        # Retornar as rotas associadas
-        return jsonify({"status": "success", "routes": routes}), 200
+        # Retornar os IDs das rotas associadas
+        return jsonify({"status": "success", "route_ids": route_ids}), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
