@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flasgger import Swagger
 from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
@@ -11,8 +11,19 @@ from app.controllers.executor_controller import executor_bp
 
 app = Flask(__name__)
 
-# Configurando CORS para aceitar qualquer origem temporariamente
-CORS(app, resources={r"/*": {"origins": ["http://localhost:3000"]}}, supports_credentials=True)
+# Configurando CORS para aceitar requisições do localhost:3000
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}}, supports_credentials=True)
+
+# Middleware para tratar requisições OPTIONS manualmente
+@app.before_request
+def handle_options():
+    if request.method == 'OPTIONS':
+        response = app.make_response("")
+        response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
 
 # Configuração do Swagger
 template = {
@@ -22,8 +33,8 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "127.0.0.1:3792",
-    "basePath": "/",
+    "host": "127.0.0.1:5000",
+    "basePath": "/api",
     "schemes": ["http"],
     "securityDefinitions": {
         "BearerAuth": {
@@ -37,16 +48,16 @@ template = {
 
 swagger = Swagger(app, template=template)
 
-# Registro dos Blueprints
-app.register_blueprint(auth_bp)
-app.register_blueprint(verzo_bp)
-app.register_blueprint(route_bp)
-app.register_blueprint(connection_bp)
-app.register_blueprint(system_bp)
-app.register_blueprint(user_bp)   
-app.register_blueprint(executor_bp)
+# Registro dos Blueprints com prefixo `/api`
+app.register_blueprint(auth_bp, url_prefix="/api/auth")
+app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
+app.register_blueprint(route_bp, url_prefix="/api/route")
+app.register_blueprint(connection_bp, url_prefix="/api/connection")
+app.register_blueprint(system_bp, url_prefix="/api/system")
+app.register_blueprint(user_bp, url_prefix="/api/user")
+app.register_blueprint(executor_bp, url_prefix="/api/executor")
 
-@app.route('/', methods=['GET'])
+@app.route('/api', methods=['GET'])
 def home():
     """
     Página inicial da API.
@@ -66,4 +77,4 @@ def home():
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3792, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

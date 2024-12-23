@@ -19,7 +19,6 @@ DATABASE_GLOSSARY = {
     "HPC": "mv_praia_da_costa",
     "HSL": "mv_sao_luiz",
     "HSF": "mv_sao_francisco",
-    "HSM": "tasy_sao_matheus",
     "IRT": "tasy_IRT",
     "ENCORE": "tasy_encore",
     "HSFB": "tasy_sao_francisco",
@@ -38,7 +37,7 @@ MV_DATABASES = [
 
 TASY_DATABASES = [
     "tasy_serra",
-    "tasy_irt",
+    "tasy_IRT",
     "tasy_encore",
     "tasy_palmas",
     "tasy_sao_francisco"
