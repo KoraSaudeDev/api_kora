@@ -278,47 +278,45 @@ def get_user_routes(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
       
-@route_bp.route('/profile/<int:user_id>', methods=['GET'])
+@route_bp.route('/profile/<int:route_id>', methods=['GET'])
 @token_required
 @admin_required
-def get_routes_by_user_id(user_data, user_id):
+def get_route_details(user_data, route_id):
     """
-    Retorna os IDs, route_prefix e descrição das rotas associadas a um usuário específico com base no ID fornecido.
+    Retorna os detalhes de uma rota específica com base no ID fornecido.
     ---
     tags:
       - Routes
     parameters:
-      - name: user_id
+      - name: route_id
         in: path
         required: true
         type: integer
-        description: ID do usuário para buscar as rotas associadas.
+        description: ID da rota para buscar os detalhes.
         example: 1
     responses:
       200:
-        description: Rotas associadas ao usuário.
+        description: Detalhes da rota.
         schema:
           type: object
           properties:
             status:
               type: string
               example: "success"
-            routes:
-              type: array
-              items:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                    example: 1
-                  route_prefix:
-                    type: string
-                    example: "/dashboard"
-                  description:
-                    type: string
-                    example: "Acesso ao dashboard principal"
+            route:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                route_prefix:
+                  type: string
+                  example: "/dashboard"
+                description:
+                  type: string
+                  example: "Acesso ao dashboard principal"
       404:
-        description: Usuário não encontrado ou sem rotas associadas.
+        description: Rota não encontrada.
       500:
         description: Erro interno no servidor.
     """
@@ -326,28 +324,27 @@ def get_routes_by_user_id(user_data, user_id):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar informações das rotas associadas ao usuário
-        query_routes = """
-            SELECT r.id, r.route_prefix, r.description
-            FROM routes r
-            JOIN user_routes ur ON r.id = ur.route_id
-            WHERE ur.user_id = %s
+        # Buscar os detalhes da rota
+        query_route = """
+            SELECT id, route_prefix, description
+            FROM routes
+            WHERE id = %s
         """
-        cursor.execute(query_routes, (user_id,))
-        routes = cursor.fetchall()
+        cursor.execute(query_route, (route_id,))
+        route = cursor.fetchone()
 
-        if not routes:
+        if not route:
             cursor.close()
             conn.close()
-            return jsonify({"status": "error", "message": "Usuário não encontrado ou sem rotas associadas."}), 404
+            return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
         cursor.close()
         conn.close()
 
-        # Retornar as informações das rotas associadas
+        # Retornar os detalhes da rota
         return jsonify({
             "status": "success",
-            "routes": routes
+            "route": route
         }), 200
 
     except Exception as e:
