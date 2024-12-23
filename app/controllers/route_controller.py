@@ -283,7 +283,7 @@ def get_user_routes(user_data):
 @admin_required
 def get_routes_by_user_id(user_data, user_id):
     """
-    Retorna os IDs das rotas associadas a um usuário específico com base no ID fornecido.
+    Retorna os IDs, route_prefix e descrição das rotas associadas a um usuário específico com base no ID fornecido.
     ---
     tags:
       - Routes
@@ -296,18 +296,27 @@ def get_routes_by_user_id(user_data, user_id):
         example: 1
     responses:
       200:
-        description: IDs das rotas associadas ao usuário.
+        description: Rotas associadas ao usuário.
         schema:
           type: object
           properties:
             status:
               type: string
               example: "success"
-            route_ids:
+            routes:
               type: array
               items:
-                type: integer
-              example: [1, 2, 3]
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  route_prefix:
+                    type: string
+                    example: "/dashboard"
+                  description:
+                    type: string
+                    example: "Acesso ao dashboard principal"
       404:
         description: Usuário não encontrado ou sem rotas associadas.
       500:
@@ -317,17 +326,17 @@ def get_routes_by_user_id(user_data, user_id):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar IDs das rotas associadas ao usuário
+        # Buscar informações das rotas associadas ao usuário
         query_routes = """
-            SELECT r.id
+            SELECT r.id, r.route_prefix, r.description
             FROM routes r
             JOIN user_routes ur ON r.id = ur.route_id
             WHERE ur.user_id = %s
         """
         cursor.execute(query_routes, (user_id,))
-        route_ids = [row["id"] for row in cursor.fetchall()]
+        routes = cursor.fetchall()
 
-        if not route_ids:
+        if not routes:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Usuário não encontrado ou sem rotas associadas."}), 404
@@ -335,8 +344,11 @@ def get_routes_by_user_id(user_data, user_id):
         cursor.close()
         conn.close()
 
-        # Retornar os IDs das rotas associadas
-        return jsonify({"status": "success", "route_ids": route_ids}), 200
+        # Retornar as informações das rotas associadas
+        return jsonify({
+            "status": "success",
+            "routes": routes
+        }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
