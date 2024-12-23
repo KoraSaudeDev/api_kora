@@ -277,3 +277,66 @@ def get_user_routes(user_data):
         return jsonify({"status": "success", "routes": user_routes}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+      
+@route_bp.route('/profile/<int:user_id>', methods=['GET'])
+@token_required
+@admin_required
+def get_routes_by_user_id(user_data, user_id):
+    """
+    Retorna as rotas associadas a um usuário específico com base no ID fornecido.
+    ---
+    tags:
+      - Routes
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        type: integer
+        description: ID do usuário para buscar as rotas associadas.
+        example: 1
+    responses:
+      200:
+        description: Rotas associadas ao usuário.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            routes:
+              type: array
+              items:
+                type: string
+              example: ["/dashboard", "/settings"]
+      404:
+        description: Usuário não encontrado ou sem rotas associadas.
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar rotas associadas ao usuário
+        query_routes = """
+            SELECT r.route_prefix
+            FROM routes r
+            JOIN user_routes ur ON r.id = ur.route_id
+            WHERE ur.user_id = %s
+        """
+        cursor.execute(query_routes, (user_id,))
+        routes = [row["route_prefix"] for row in cursor.fetchall()]
+
+        if not routes:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Usuário não encontrado ou sem rotas associadas."}), 404
+
+        cursor.close()
+        conn.close()
+
+        # Retornar as rotas associadas
+        return jsonify({"status": "success", "routes": routes}), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
