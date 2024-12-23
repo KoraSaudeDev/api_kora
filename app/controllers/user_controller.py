@@ -614,8 +614,8 @@ def get_user_profile_by_id(user_data, user_id):
             routes:
               type: array
               items:
-                type: string
-              example: ["/dashboard", "/settings"]
+                type: integer
+              example: [1, 2, 3]
       404:
         description: Usuário não encontrado.
       500:
@@ -635,15 +635,14 @@ def get_user_profile_by_id(user_data, user_id):
             conn.close()
             return jsonify({"status": "error", "message": "Usuário não encontrado."}), 404
 
-        # Buscar rotas associadas ao usuário
+        # Buscar IDs das rotas associadas ao usuário
         query_routes = """
-            SELECT r.route_prefix
-            FROM routes r
-            JOIN user_routes ur ON r.id = ur.route_id
+            SELECT ur.route_id
+            FROM user_routes ur
             WHERE ur.user_id = %s
         """
         cursor.execute(query_routes, (user_id,))
-        routes = [row["route_prefix"] for row in cursor.fetchall()]
+        routes = [row["route_id"] for row in cursor.fetchall()]
 
         cursor.close()
         conn.close()
