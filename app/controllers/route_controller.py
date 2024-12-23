@@ -65,45 +65,94 @@ def create_route(user_data):
 @admin_required
 def list_routes(user_data):
     """
-    Lista todas as rotas existentes.
+    Lista todas as rotas existentes com suporte à paginação.
     ---
     tags:
       - Routes
+    parameters:
+      - name: page
+        in: query
+        required: false
+        type: integer
+        description: Número da página para a paginação. Default: 1
+        example: 1
+      - name: limit
+        in: query
+        required: false
+        type: integer
+        description: Número de registros por página. Default: 10
+        example: 10
     responses:
       200:
-        description: Lista de rotas.
+        description: Lista de rotas paginada.
         schema:
-          type: array
-          items:
-            type: object
-            properties:
-              id:
-                type: integer
-                example: 1
-              route_prefix:
-                type: string
-                example: "/minha/rota"
-              description:
-                type: string
-                example: "Descrição da rota"
-              created_at:
-                type: string
-                format: date-time
-    500:
-      description: Erro interno no servidor.
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            total:
+              type: integer
+              example: 50
+            routes:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  route_prefix:
+                    type: string
+                    example: "/minha/rota"
+                  description:
+                    type: string
+                    example: "Descrição da rota"
+      500:
+        description: Erro interno no servidor.
     """
     try:
+        # Obter os parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        query = "SELECT id, route_prefix, description FROM routes"
+        # Query para buscar as rotas com paginação
+        query = f"""
+            SELECT id, route_prefix, description 
+            FROM routes
+            ORDER BY id
+            LIMIT {limit} OFFSET {offset}
+        """
         cursor.execute(query)
         routes = cursor.fetchall()
+
+        # Query para obter a contagem total de rotas
+        count_query = "SELECT COUNT(*) AS total FROM routes"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
 
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "routes": routes}), 200
+        # Retornar os dados paginados
+        return jsonify({
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "routes": routes
+        }), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -175,7 +224,7 @@ def edit_route(user_data, route_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@route_bp.route('/my', methods=['GET'])
+@route_bp.route('/me', methods=['GET'])
 @token_required
 def get_user_routes(user_data):
     """

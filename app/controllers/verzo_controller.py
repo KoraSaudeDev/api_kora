@@ -81,7 +81,6 @@ def verzo_page(*args, **kwargs):
     # Caminho absoluto até a pasta static/html
     return redirect("http://10.27.254.153:3000/verzo", code=302)
 
-
 @verzo_bp.route('/<route_type>/<database>/<query_name>', methods=['POST'])
 @token_required
 @permission_required(route_prefix='/verzo')
