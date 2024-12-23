@@ -98,28 +98,58 @@ def edit_user(user_data, user_id):
         data = request.json
         updates = []
         params = []
+        promote_to_admin = False
 
+        # Verifica se o username será atualizado
         if "username" in data:
             updates.append("username = %s")
             params.append(data["username"])
+
+        # Verifica se a senha será atualizada
         if "password" in data:
             password_hash = bcrypt.hashpw(data["password"].encode('utf-8'), bcrypt.gensalt())
             updates.append("password_hash = %s")
             params.append(password_hash)
+
+        # Verifica se a permissão de administrador será alterada
         if "is_admin" in data:
             updates.append("is_admin = %s")
             params.append(data["is_admin"])
 
+            # Checar se o usuário está sendo promovido a admin
+            conn = create_db_connection_mysql()
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT is_admin FROM users WHERE id = %s", (user_id,))
+            current_user = cursor.fetchone()
+            if not current_user:
+                cursor.close()
+                conn.close()
+                return jsonify({"status": "error", "message": "Usuário não encontrado"}), 404
+
+            if not current_user["is_admin"] and data["is_admin"]:
+                promote_to_admin = True  # Marca que está promovendo para admin
+            
+            cursor.close()
+            conn.close()
+
         if not updates:
             return jsonify({"status": "error", "message": "Nenhum dado para atualizar"}), 400
 
+        # Atualizar os dados do usuário
         params.append(user_id)
         with create_db_connection_mysql() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = %s", tuple(params))
-            conn.commit()
+                conn.commit()
 
-        return jsonify({"status": "success", "message": "Usuário atualizado com sucesso"}), 200
+                # Se o usuário foi promovido a admin, remover suas rotas
+                if promote_to_admin:
+                    cursor.execute("DELETE FROM user_routes WHERE user_id = %s", (user_id,))
+                    conn.commit()
+
+        # Retornar o ID do usuário atualizado
+        return jsonify({"status": "success", "message": "Usuário atualizado com sucesso", "user_id": user_id}), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
