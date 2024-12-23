@@ -66,3 +66,28 @@ class AuthService:
         except Exception as e:
             logging.error(f"Erro no AuthService: {e}")
             return {"status": "error", "message": str(e), "status_code": 500}
+        
+class AuthService:
+    @staticmethod
+    def get_user_data(username):
+        connection = create_mysql_connection()
+        cursor = connection.cursor(dictionary=True)
+        query = "SELECT * FROM users WHERE username = %s"
+        cursor.execute(query, (username,))
+        user_data = cursor.fetchone()
+        cursor.close()
+        connection.close()
+        return user_data
+
+    @staticmethod
+    def verify_password(password, hashed_password):
+        return bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+    @staticmethod
+    def generate_token(user_data):
+        payload = {
+            "id": user_data['id'],
+            "username": user_data['username'],
+            "is_admin": user_data.get('is_admin', False)
+        }
+        return create_token(payload)

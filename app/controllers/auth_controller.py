@@ -75,17 +75,30 @@ def login():
             return jsonify({"status": "error", "message": "Usuário e senha são obrigatórios"}), 400
 
         # Chamar o serviço de autenticação
-        response = AuthService.login(username, password)
+        user_data = AuthService.get_user_data(username)
+        if not user_data:
+            return jsonify({"status": "error", "message": "Usuário ou senha inválidos"}), 401
 
-        # Verificar se o campo `is_active` está ativo (1)
-        if response.get("is_active") == 0:
+        # Verificar a senha
+        if not AuthService.verify_password(password, user_data['password_hash']):
+            return jsonify({"status": "error", "message": "Usuário ou senha inválidos"}), 401
+
+        # Verificar se o usuário está ativo
+        if user_data.get("is_active") == 0:
             return jsonify({
                 "status": "error",
                 "message": "Conta inativa. Entre em contato com o administrador."
             }), 403
 
-        # Retornar o token ou outro erro dependendo da resposta
-        return jsonify(response), response.get("status_code", 200)
+        # Gerar o token JWT
+        token = AuthService.generate_token(user_data)
+
+        # Retornar a resposta
+        return jsonify({
+            "status": "success",
+            "token": token,
+            "routes": user_data.get("routes", [])
+        }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
