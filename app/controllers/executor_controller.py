@@ -16,42 +16,6 @@ executor_bp = Blueprint('executors', __name__, url_prefix='/executors')
 def create_executor(user_data):
     """
     Cria um executor e salva a query em um arquivo .sql.
-    ---
-    tags:
-      - Executors
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - system_id
-            - connection_ids
-            - name
-            - query
-          properties:
-            system_id:
-              type: integer
-              example: 1
-            connection_ids:
-              type: array
-              items:
-                type: integer
-              example: [1, 2]
-            name:
-              type: string
-              example: "ATENDIME"
-            query:
-              type: string
-              example: "SELECT * FROM atendimentos WHERE data >= '2024-01-01'"
-    responses:
-      201:
-        description: Executor criado com sucesso.
-      400:
-        description: Campos obrigatórios ausentes ou inválidos.
-      500:
-        description: Erro interno no servidor.
     """
     try:
         data = request.json
@@ -59,6 +23,7 @@ def create_executor(user_data):
         connection_ids = data.get("connection_ids")
         name = data.get("name")
         query = data.get("query")
+        parameters = data.get("parameters", [])  # Lista de parâmetros
 
         if not all([system_id, connection_ids, name, query]):
             return jsonify({"status": "error", "message": "Todos os campos são obrigatórios."}), 400
@@ -94,12 +59,22 @@ def create_executor(user_data):
             VALUES (%s, %s, %s, %s)
         """
         cursor.execute(query_insert, (system_id, connection_ids_str, name, file_path))
-        conn.commit()
+        executor_id = cursor.lastrowid  # Obter o ID do executor criado
 
+        # Salvar parâmetros no banco
+        if parameters:
+            parameter_query = """
+                INSERT INTO executor_parameters (executor_id, name, type, value)
+                VALUES (%s, %s, %s, %s)
+            """
+            for param in parameters:
+                cursor.execute(parameter_query, (executor_id, param["name"], param["type"], param["value"]))
+
+        conn.commit()
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "message": "Executor criado com sucesso.", "file_path": file_path}), 201
+        return jsonify({"status": "success", "message": "Executor criado com sucesso.", "executor_id": executor_id}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -189,6 +164,8 @@ def execute_query(user_data, executor_id):
             username = connection_data["username"]
             encrypted_password = connection_data["password"]  # A senha ainda criptografada
             database_name = connection_data["database_name"]
+            service_name = connection_data.get("service_name", None)
+            sid = connection_data.get("sid", None)
 
             try:
                 # Descriptografar a senha
@@ -198,7 +175,10 @@ def execute_query(user_data, executor_id):
                     db_conn = create_mysql_connection(host, port, username, password, database_name)
                     final_query = paginated_query_mysql
                 elif db_type == "oracle":
-                    db_conn = create_oracle_connection(host, port, username, password, connection_data["service_name"])
+                    db_conn = create_oracle_connection(
+                        host=host, port=port, username=username, password=password,
+                        service_name=service_name, sid=sid
+                    )
                     final_query = paginated_query_oracle
                 else:
                     results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."

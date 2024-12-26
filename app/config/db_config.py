@@ -33,7 +33,6 @@ def create_db_connection_mysql():
     Cria uma conexão com o banco MySQL usando as configurações definidas no env.py.
     """
     try:
-        logging.info("Tentando conectar ao banco MySQL...")
         conn = mysql.connector.connect(
             host=DB_CONFIG["host"],
             port=DB_CONFIG["port"],
@@ -49,7 +48,6 @@ def create_db_connection_mysql():
 
 def create_mysql_connection():
     try:
-        logging.info("Tentando conectar ao banco MySQL...")
         connection = mysql.connector.connect(
             host=DB_CONFIG["host"],
             port=DB_CONFIG["port"],

@@ -12,7 +12,7 @@ connection_bp = Blueprint('connections', __name__, url_prefix='/connections')
 @permission_required(route_prefix='/connections')
 def create_connection(user_data):
     """
-    Cria uma nova conexão de banco de dados.
+    Cria uma nova conexão de banco de dados com suporte a SID e Service Name para Oracle.
     ---
     tags:
       - Conexões
@@ -29,7 +29,6 @@ def create_connection(user_data):
             - port
             - username
             - password
-            - database_name
           properties:
             name:
               type: string
@@ -56,12 +55,16 @@ def create_connection(user_data):
             service_name:
               type: string
               example: "orcl"
-              description: "Apenas para conexões Oracle."
+              description: "Apenas para conexões Oracle usando Service Name."
+            sid:
+              type: string
+              example: "orclsid"
+              description: "Apenas para conexões Oracle usando SID."
     responses:
       201:
         description: Conexão criada com sucesso.
       400:
-        description: Campos obrigatórios ausentes.
+        description: Campos obrigatórios ausentes ou inválidos.
       500:
         description: Erro interno no servidor.
     """
@@ -75,13 +78,17 @@ def create_connection(user_data):
         password = data.get("password")
         database_name = data.get("database_name") or None
         service_name = data.get("service_name") or None
+        sid = data.get("sid") or None
 
         # Validação de campos obrigatórios
         if not all([name, db_type, host, port, username, password]):
             return jsonify({"status": "error", "message": "Todos os campos obrigatórios devem ser preenchidos."}), 400
 
-        if db_type == "oracle" and not service_name:
-            return jsonify({"status": "error", "message": "O campo 'service_name' é obrigatório para conexões Oracle."}), 400
+        if db_type == "oracle":
+            if not service_name and not sid:
+                return jsonify({"status": "error", "message": "Para conexões Oracle, 'service_name' ou 'sid' deve ser preenchido."}), 400
+            if service_name and sid:
+                return jsonify({"status": "error", "message": "Para conexões Oracle, preencha apenas 'service_name' ou 'sid', não ambos."}), 400
 
         # Criptografar a senha
         encrypted_password = encrypt_password(password)
@@ -91,10 +98,10 @@ def create_connection(user_data):
         cursor = conn.cursor()
 
         query = """
-            INSERT INTO connections (name, db_type, host, port, username, password, database_name, service_name)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO connections (name, db_type, host, port, username, password, database_name, service_name, sid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
-        cursor.execute(query, (name, db_type, host, port, username, encrypted_password, database_name, service_name))
+        cursor.execute(query, (name, db_type, host, port, username, encrypted_password, database_name, service_name, sid))
         conn.commit()
 
         cursor.close()
@@ -110,32 +117,112 @@ def create_connection(user_data):
 @permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
-    Lista todas as conexões de banco de dados.
+    Lista todas as conexões de banco de dados com suporte à paginação.
     ---
     tags:
       - Conexões
+    parameters:
+      - name: page
+        in: query
+        required: false
+        type: integer
+        description: Número da página para paginação. Default: 1
+        example: 1
+      - name: limit
+        in: query
+        required: false
+        type: integer
+        description: Número de registros por página. Default: 10
+        example: 10
     responses:
       200:
-        description: Lista de conexões armazenadas no sistema.
+        description: Lista de conexões armazenadas no sistema, paginada.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            total:
+              type: integer
+              example: 50
+            connections:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  name:
+                    type: string
+                    example: "Conexão de Produção"
+                  db_type:
+                    type: string
+                    example: "MySQL"
+                  host:
+                    type: string
+                    example: "localhost"
+                  port:
+                    type: integer
+                    example: 3306
+                  username:
+                    type: string
+                    example: "admin"
+                  database_name:
+                    type: string
+                    example: "my_database"
+                  service_name:
+                    type: string
+                    example: "my_service"
+                  created_at:
+                    type: string
+                    format: date-time
+                    example: "2023-01-01T00:00:00Z"
       500:
         description: Erro interno no servidor.
     """
     try:
+        # Obter os parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
+        # Query para buscar conexões com paginação
         query = """
             SELECT id, name, db_type, host, port, username, database_name, service_name, created_at 
             FROM connections
+            ORDER BY id
+            LIMIT %s OFFSET %s
         """
-        cursor.execute(query)
+        cursor.execute(query, (limit, offset))
         connections = cursor.fetchall()
+
+        # Query para obter o número total de conexões
+        count_query = "SELECT COUNT(*) AS total FROM connections"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
 
         cursor.close()
         conn.close()
 
-        # Retorna a lista de conexões (sem descriptografar a senha)
-        return jsonify({"status": "success", "connections": connections}), 200
+        # Retorna a lista de conexões com paginação
+        return jsonify({
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "connections": connections
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
