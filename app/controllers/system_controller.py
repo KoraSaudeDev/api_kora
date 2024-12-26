@@ -1,6 +1,6 @@
 import os
 from flask import Blueprint, request, jsonify
-from app.utils.decorators import token_required, admin_required
+from app.utils.decorators import token_required, admin_required, permission_required
 from app.config.db_config import create_db_connection_mysql
 import cx_Oracle
 
@@ -12,6 +12,7 @@ BASE_QUERIES_PATH = os.path.join("app", "queries")
 @system_bp.route('/create', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/systems')
 def create_system(user_data):
     """
     Cria um novo system associado a uma ou mais conexões.
@@ -91,6 +92,7 @@ def create_system(user_data):
 @system_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/systems')
 def list_systems(user_data):
     """
     Lista todos os systems e suas conexões associadas.
@@ -140,6 +142,7 @@ def list_systems(user_data):
 @system_bp.route('/remove-connection', methods=['DELETE'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/systems')
 def remove_connection_from_system(user_data):
     """
     Remove uma conexão associada a um system.
@@ -216,6 +219,7 @@ def remove_connection_from_system(user_data):
 @system_bp.route('/add-connections', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/systems')
 def add_connections_to_system(user_data):
     """
     Adiciona novas conexões a um system existente.

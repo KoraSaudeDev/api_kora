@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.utils.decorators import token_required, admin_required
+from app.utils.decorators import token_required, admin_required, permission_required
 from app.utils.helpers import encrypt_password, decrypt_password
 from app.config.db_config import create_db_connection_mysql
 
@@ -9,6 +9,7 @@ connection_bp = Blueprint('connections', __name__, url_prefix='/connections')
 @connection_bp.route('/create', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/connections')
 def create_connection(user_data):
     """
     Cria uma nova conexão de banco de dados.
@@ -106,6 +107,7 @@ def create_connection(user_data):
 @connection_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
     Lista todas as conexões de banco de dados.
@@ -140,6 +142,7 @@ def list_connections(user_data):
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/connections')
 def delete_connection(user_data, connection_id):
     """
     Deleta uma conexão de banco de dados.

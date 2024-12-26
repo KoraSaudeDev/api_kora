@@ -12,6 +12,7 @@ executor_bp = Blueprint('executors', __name__, url_prefix='/executors')
 @executor_bp.route('/create', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/executors')
 def create_executor(user_data):
     """
     Cria um executor e salva a query em um arquivo .sql.
@@ -105,6 +106,7 @@ def create_executor(user_data):
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/executors')
 def execute_query(user_data, executor_id):
     """
     Executa a query salva em um executor para múltiplas conexões, com suporte à paginação.
@@ -230,6 +232,7 @@ def execute_query(user_data, executor_id):
 @executor_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/executors')
 def list_executors(user_data):
     """
     Lista todos os executores com detalhes, incluindo nomes de sistemas e conexões, com suporte à paginação.

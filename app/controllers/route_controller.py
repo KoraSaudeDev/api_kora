@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app.utils.decorators import token_required, admin_required
+from app.utils.decorators import token_required, admin_required, permission_required
 from app.config.db_config import create_db_connection_mysql
 
 # Blueprint para rotas
@@ -8,6 +8,7 @@ route_bp = Blueprint('routes', __name__, url_prefix='/routes')
 @route_bp.route('/create', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/routes')
 def create_route(user_data):
     """
     Insere uma nova rota no banco de dados.
@@ -63,6 +64,7 @@ def create_route(user_data):
 @route_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/routes')
 def list_routes(user_data):
     """
     Lista todas as rotas existentes com suporte à paginação.
@@ -159,6 +161,7 @@ def list_routes(user_data):
 @route_bp.route('/edit/<int:route_id>', methods=['PUT'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
     Edita uma rota existente com base no ID fornecido.
@@ -245,9 +248,9 @@ def edit_route(user_data, route_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @route_bp.route('/me', methods=['GET'])
 @token_required
+@permission_required(route_prefix='/routes')
 def get_user_routes(user_data):
     """
     Retorna todas as rotas associadas ao usuário logado.
@@ -303,6 +306,7 @@ def get_user_routes(user_data):
 @route_bp.route('/profile/<int:route_id>', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/routes')
 def get_route_details(user_data, route_id):
     """
     Retorna os detalhes de uma rota específica com base no ID fornecido.

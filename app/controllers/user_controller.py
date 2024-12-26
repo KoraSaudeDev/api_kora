@@ -222,6 +222,7 @@ def restore_user(user_data, user_id):
 @user_bp.route('/routes/assign', methods=['POST'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/users')
 def assign_routes(user_data):
     """
     Associa rotas a um usuário.
@@ -287,6 +288,7 @@ def assign_routes(user_data):
 @user_bp.route('/routes/remove', methods=['DELETE'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/users')
 def remove_routes(user_data):
     """
     Remove todas as rotas de um usuário.
@@ -333,6 +335,7 @@ def remove_routes(user_data):
 @user_bp.route('/routes/update', methods=['PUT'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/users')
 def update_routes(user_data):
     """
     Atualiza as rotas de um usuário, removendo as rotas existentes e associando as novas fornecidas.
@@ -413,6 +416,7 @@ def update_routes(user_data):
 @user_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/users')
 def list_users_with_routes(user_data):
     """
     Lista todos os usuários, suas rotas associadas, status de administrador e ativo/inativo, com suporte à paginação.
@@ -520,6 +524,7 @@ def list_users_with_routes(user_data):
 
 @user_bp.route('/me', methods=['GET'])
 @token_required
+@permission_required(route_prefix='/users')
 def get_user_profile(user_data):
     """
     Retorna os dados do usuário ativo e suas rotas associadas.
@@ -606,11 +611,11 @@ def get_user_profile(user_data):
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-      
-      
+         
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
 @admin_required
+@permission_required(route_prefix='/users')
 def get_user_profile_by_id(user_data, user_id):
     """
     Retorna o perfil de um usuário específico com base no ID fornecido, incluindo as rotas associadas.
