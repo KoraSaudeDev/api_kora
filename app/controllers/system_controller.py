@@ -292,7 +292,6 @@ def update_system_connections(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @system_bp.route('/profile/<int:id>', methods=['GET'])
 @token_required
 @admin_required
