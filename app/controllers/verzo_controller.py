@@ -1,11 +1,7 @@
 import json
-import bcrypt
 from flask import Blueprint, request, jsonify, redirect
-from app.utils.decorators import token_required, admin_required, permission_required
-from app.config.db_config import create_db_connection_mysql, create_verzo_connection   
-from flask import current_app
-from flask import Flask, Blueprint, request, jsonify, send_from_directory
-import os
+from app.utils.decorators import token_required, permission_required
+from app.config.db_config import create_verzo_connection
 
 # Definindo o Blueprint antes de ser usado
 verzo_bp = Blueprint('verzo', __name__, url_prefix='/verzo')
@@ -44,41 +40,29 @@ TASY_DATABASES = [
 ]
 
 @verzo_bp.route('/', methods=['GET'])
-# @token_required
-# @permission_required(route_prefix='/verzo')
-def home(*args, **kwargs):
+def home():
     """
-    Página inicial da API.
-    ---
-    responses:
-      200:
-        description: Página inicial da API.
-        content:
-          text/html:
-            schema:
-              type: string
-    """
-    # Caminho absoluto até a pasta static/html
-    return redirect("http://10.27.254.153:3000/login", code=302)
-  
-@verzo_bp.route('/docs', methods=['GET'])
-# @token_required
-# @permission_required(route_prefix='/verzo')
-def verzo_page(*args, **kwargs):
-    """
-    Rota para exibir a página Verzo.
+    Página inicial da API Verzo.
     ---
     tags:
       - Páginas HTML
     responses:
-      200:
-        description: Retorna o HTML da página Verzo.
-        content:
-          text/html:
-            schema:
-              type: string
+      302:
+        description: Redireciona para a página de login.
     """
-    # Caminho absoluto até a pasta static/html
+    return redirect("http://10.27.254.153:3000/login", code=302)
+
+@verzo_bp.route('/docs', methods=['GET'])
+def verzo_page():
+    """
+    Tela de documentação da verzo.
+    ---
+    tags:
+      - Páginas HTML
+    responses:
+      302:
+        description: Redireciona para a página Verzo.
+    """
     return redirect("http://10.27.254.153:3000/verzo", code=302)
 
 @verzo_bp.route('/<route_type>/<database>/<query_name>', methods=['POST'])
@@ -89,7 +73,7 @@ def query_by_type(user_data, route_type, database, query_name):
     Consulta por tipo e banco de dados.
     ---
     tags:
-      - Consultas por Tipo
+      - Verzo
     parameters:
       - name: route_type
         in: path
@@ -102,23 +86,23 @@ def query_by_type(user_data, route_type, database, query_name):
         type: string
         required: true
         description: Sigla do banco de dados.
-        example: "HA"
       - name: query_name
         in: path
         type: string
         required: true
         description: Nome da query no banco.
-        example: "CONFIG_UNIDADE"
       - name: limit
         in: query
         type: integer
-        default: 100
-        description: Número máximo de resultados a retornar.
+        required: false
+        description: Número máximo de resultados.
+        example: 100
       - name: offset
         in: query
         type: integer
-        default: 0
+        required: false
         description: Offset para paginação.
+        example: 0
     responses:
       200:
         description: Dados retornados com sucesso.
@@ -126,10 +110,13 @@ def query_by_type(user_data, route_type, database, query_name):
           type: array
           items:
             type: object
-            example:
-              id: 1
-              name: "Example"
-              description: "Exemplo de dados retornados"
+            properties:
+              id:
+                type: integer
+                example: 1
+              name:
+                type: string
+                example: "Exemplo de nome"
       400:
         description: Parâmetros inválidos.
       404:
@@ -138,54 +125,30 @@ def query_by_type(user_data, route_type, database, query_name):
         description: Erro interno no servidor.
     """
     try:
-        # Traduz a sigla para o nome correto do banco usando o glossário
         actual_database = DATABASE_GLOSSARY.get(database.upper())
         if not actual_database:
             return jsonify({"status": "error", "message": f"Nenhum banco encontrado para a sigla '{database}'"}), 404
 
-        # Determina o tipo de rota e valida o banco
-        if route_type.upper() == "MV":
-            if actual_database not in MV_DATABASES:
-                return jsonify({"status": "error", "message": f"O banco '{actual_database}' não pertence ao tipo MV."}), 400
-        elif route_type.upper() == "TASY":
-            if actual_database not in TASY_DATABASES:
-                return jsonify({"status": "error", "message": f"O banco '{actual_database}' não pertence ao tipo TASY."}), 400
-        else:
-            return jsonify({"status": "error", "message": "Tipo de rota inválido. Use 'MV' ou 'TASY'."}), 400
+        if route_type.upper() == "MV" and actual_database not in MV_DATABASES:
+            return jsonify({"status": "error", "message": f"O banco '{actual_database}' não pertence ao tipo MV."}), 400
+        elif route_type.upper() == "TASY" and actual_database not in TASY_DATABASES:
+            return jsonify({"status": "error", "message": f"O banco '{actual_database}' não pertence ao tipo TASY."}), 400
 
         limit = request.args.get("limit", default=100, type=int)
         offset = request.args.get("offset", default=0, type=int)
 
-        table_name = f"{actual_database}"
         conn = create_verzo_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # Verifica se a tabela existe
-        cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
-        if not cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return jsonify({"status": "error", "message": f"Tabela '{table_name}' não encontrada."}), 404
-
-        route_prefix = f"/{route_type.lower()}/"
-        query = f"SELECT data FROM `{table_name}` WHERE route = %s LIMIT %s OFFSET %s;"
-        cursor.execute(query, (f"{route_prefix}{query_name}", limit, offset))
+        query = f"SELECT data FROM `{actual_database}` WHERE route = %s LIMIT %s OFFSET %s;"
+        cursor.execute(query, (f"/{route_type.lower()}/{query_name}", limit, offset))
         rows = cursor.fetchall()
-
-        processed_rows = []
-        for row in rows:
-            try:
-                record = json.loads(row["data"])
-                record.pop("ROWNUM", None)  # Remove o campo ROWNUM
-                processed_rows.append(record)
-            except (KeyError, json.JSONDecodeError):
-                continue  # Ignora entradas inválidas
 
         cursor.close()
         conn.close()
 
-        # Retorna diretamente a lista de objetos JSON
+        processed_rows = [json.loads(row["data"]) for row in rows if "data" in row]
         return jsonify(processed_rows), 200
+
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-    

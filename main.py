@@ -24,6 +24,7 @@ def handle_options():
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
+    return None
 
 # Configuração do Swagger
 template = {
@@ -33,8 +34,8 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "127.0.0.1:5000",
-    "basePath": "/api",
+    "host": "172.17.91.170:3792",
+    "basePath": "/",
     "schemes": ["http"],
     "securityDefinitions": {
         "BearerAuth": {
@@ -46,7 +47,22 @@ template = {
     }
 }
 
-swagger = Swagger(app, template=template)
+config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec",
+            "route": "/verzo/docs/apispec.json",
+            "rule_filter": lambda rule: rule.rule.startswith("/api/verzo") or rule.rule.startswith("/api/auth"),
+            "model_filter": lambda tag: True
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/verzo/docs"
+}
+
+swagger = Swagger(app, template=template, config=config)
 
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -66,13 +82,15 @@ def home():
       - Base
     responses:
       200:
-        description: Mensagem de boas-vindas.
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Bem-vindo à API Verzo!"
+        description: Retorna uma mensagem de boas-vindas.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Bem-vindo à API Verzo!"
     """
     return {"message": "Bem-vindo à API Verzo!"}, 200
 

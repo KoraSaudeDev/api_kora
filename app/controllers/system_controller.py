@@ -95,27 +95,89 @@ def create_system(user_data):
 @permission_required(route_prefix='/systems')
 def list_systems(user_data):
     """
-    Lista todos os systems e suas conexões associadas.
+    Lista todos os systems e suas conexões associadas com suporte à paginação.
     ---
     tags:
       - Systems
+    parameters:
+      - name: page
+        in: query
+        required: false
+        type: integer
+        description: Número da página para paginação. Default: 1
+        example: 1
+      - name: limit
+        in: query
+        required: false
+        type: integer
+        description: Número de registros por página. Default: 10
+        example: 10
     responses:
       200:
-        description: Lista de systems e conexões.
+        description: Lista de systems e conexões, paginada.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            total:
+              type: integer
+              example: 50
+            systems:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  name:
+                    type: string
+                    example: "System A"
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                          example: 1
+                        name:
+                          type: string
+                          example: "Conexão de Produção"
     """
     try:
+        # Obter os parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
+        # Query para buscar systems com paginação
         query = """
             SELECT s.id AS system_id, s.name AS system_name, c.id AS connection_id, c.name AS connection_name
             FROM systems s
             LEFT JOIN system_connections sc ON s.id = sc.system_id
             LEFT JOIN connections c ON sc.connection_id = c.id
             ORDER BY s.id
+            LIMIT %s OFFSET %s
         """
-        cursor.execute(query)
+        cursor.execute(query, (limit, offset))
         results = cursor.fetchall()
+
+        # Query para obter o número total de systems
+        count_query = "SELECT COUNT(DISTINCT s.id) AS total FROM systems s"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
 
         systems = {}
         for row in results:
@@ -135,7 +197,13 @@ def list_systems(user_data):
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "systems": list(systems.values())}), 200
+        return jsonify({
+            "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "systems": list(systems.values())
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 

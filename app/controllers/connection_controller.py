@@ -267,3 +267,60 @@ def delete_connection(user_data, connection_id):
         return jsonify({"status": "success", "message": "Conexão deletada com sucesso."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@connection_bp.route('/list-simple', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/connections')
+def list_connections_simple(user_data):
+    """
+    Lista todas as conexões de banco de dados com os campos simplificados.
+    ---
+    tags:
+      - Conexões
+    responses:
+      200:
+        description: Lista simplificada de conexões armazenadas no sistema.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            connections:
+              type: array
+              items:
+                type: object
+                properties:
+                  value:
+                    type: integer
+                    example: 1
+                  label:
+                    type: string
+                    example: "Conexão de Produção"
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query para buscar conexões simplificadas
+        query = """
+            SELECT id AS value, name AS label 
+            FROM connections
+            ORDER BY id
+        """
+        cursor.execute(query)
+        connections = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Retorna a lista de conexões simplificadas
+        return jsonify({
+            "status": "success",
+            "connections": connections
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
