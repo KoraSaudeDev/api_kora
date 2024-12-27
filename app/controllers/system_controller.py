@@ -213,7 +213,7 @@ def list_systems(user_data):
 @permission_required(route_prefix='/systems')
 def update_system_connections(user_data):
     """
-    Atualiza as conexões associadas a um system, adicionando ou removendo vínculos conforme necessário.
+    Atualiza as conexões associadas a um sistema, removendo todas as existentes e adicionando as novas.
     ---
     tags:
       - Systems
@@ -268,32 +268,16 @@ def update_system_connections(user_data):
         if not cursor.fetchone():
             cursor.close()
             conn.close()
-            return jsonify({"status": "error", "message": "System não encontrado."}), 404
+            return jsonify({"status": "error", "message": "Sistema não encontrado."}), 404
 
-        # Atualizar as associações
+        # Remover todas as associações existentes para o sistema
+        query_delete_all = "DELETE FROM system_connections WHERE system_id = %s"
+        cursor.execute(query_delete_all, (system_id,))
+
+        # Adicionar os novos relacionamentos
+        query_insert = "INSERT INTO system_connections (system_id, connection_id) VALUES (%s, %s)"
         for connection_id in connection_ids:
-            # Verificar se a associação já existe
-            query_check_association = """
-                SELECT id FROM system_connections
-                WHERE system_id = %s AND connection_id = %s
-            """
-            cursor.execute(query_check_association, (system_id, connection_id))
-            association_exists = cursor.fetchone()
-
-            if association_exists:
-                # Remover a associação existente
-                query_delete = """
-                    DELETE FROM system_connections
-                    WHERE system_id = %s AND connection_id = %s
-                """
-                cursor.execute(query_delete, (system_id, connection_id))
-            else:
-                # Adicionar uma nova associação
-                query_insert = """
-                    INSERT INTO system_connections (system_id, connection_id)
-                    VALUES (%s, %s)
-                """
-                cursor.execute(query_insert, (system_id, connection_id))
+            cursor.execute(query_insert, (system_id, connection_id))
 
         conn.commit()
         cursor.close()
@@ -307,6 +291,7 @@ def update_system_connections(user_data):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @system_bp.route('/profile/<int:id>', methods=['GET'])
 @token_required
