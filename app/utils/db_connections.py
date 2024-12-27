@@ -24,14 +24,22 @@ def create_mysql_connection(host, port, user, password, database):
         logging.error(f"Erro ao conectar ao MySQL: {e}")
         raise ConnectionError(f"Erro ao conectar ao MySQL: {e}")
 
-
-def create_oracle_connection(host, port, user, password, service_name):
+def create_oracle_connection(host, port, user, password, service_name=None, sid=None):
     """
-    Cria uma conexão Oracle.
+    Cria uma conexão Oracle, suportando service_name ou SID.
     """
     try:
         logging.info("Conectando ao banco Oracle...")
-        dsn = cx_Oracle.makedsn(host, port, service_name=service_name)
+
+        # Constrói o DSN com base no service_name ou sid
+        if service_name:
+            dsn = cx_Oracle.makedsn(host, port, service_name=service_name)
+        elif sid:
+            dsn = cx_Oracle.makedsn(host, port, sid=sid)
+        else:
+            raise ValueError("É necessário fornecer 'service_name' ou 'sid' para conexões Oracle.")
+
+        # Estabelece a conexão
         connection = cx_Oracle.connect(
             user=user,
             password=password,
@@ -40,5 +48,9 @@ def create_oracle_connection(host, port, user, password, service_name):
         logging.info("Conexão com Oracle estabelecida com sucesso.")
         return connection
     except cx_Oracle.DatabaseError as e:
-        logging.error(f"Erro ao conectar ao Oracle: {e}")
-        raise ConnectionError(f"Erro ao conectar ao Oracle: {e}")
+        error_obj, = e.args
+        logging.error(f"Erro ao conectar ao Oracle: Código={error_obj.code}, Mensagem={error_obj.message}")
+        raise ConnectionError(f"Erro ao conectar ao Oracle: {error_obj.message}")
+    except ValueError as ve:
+        logging.error(f"Erro de validação: {ve}")
+        raise

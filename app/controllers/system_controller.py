@@ -207,90 +207,13 @@ def list_systems(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@system_bp.route('/remove-connection', methods=['DELETE'])
+@system_bp.route('/update-connections', methods=['POST'])
 @token_required
 @admin_required
 @permission_required(route_prefix='/systems')
-def remove_connection_from_system(user_data):
+def update_system_connections(user_data):
     """
-    Remove uma conexão associada a um system.
-    ---
-    tags:
-      - Systems
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - system_id
-            - connection_id
-          properties:
-            system_id:
-              type: integer
-              example: 1
-            connection_id:
-              type: integer
-              example: 2
-    responses:
-      200:
-        description: Conexão removida do system com sucesso.
-      400:
-        description: Campos obrigatórios ausentes ou inválidos.
-      404:
-        description: Associação não encontrada.
-      500:
-        description: Erro interno no servidor.
-    """
-    try:
-        data = request.json
-        system_id = data.get("system_id")
-        connection_id = data.get("connection_id")
-
-        # Validação dos campos
-        if not system_id or not connection_id:
-            return jsonify({"status": "error", "message": "Os campos 'system_id' e 'connection_id' são obrigatórios."}), 400
-
-        # Conexão com o banco
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor()
-
-        # Verificar se a associação existe
-        query_check = """
-            SELECT id FROM system_connections
-            WHERE system_id = %s AND connection_id = %s
-        """
-        cursor.execute(query_check, (system_id, connection_id))
-        association = cursor.fetchone()
-
-        if not association:
-            cursor.close()
-            conn.close()
-            return jsonify({"status": "error", "message": "Associação não encontrada."}), 404
-
-        # Remover a associação
-        query_delete = """
-            DELETE FROM system_connections
-            WHERE system_id = %s AND connection_id = %s
-        """
-        cursor.execute(query_delete, (system_id, connection_id))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "message": "Conexão removida do system com sucesso."}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@system_bp.route('/add-connections', methods=['POST'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/systems')
-def add_connections_to_system(user_data):
-    """
-    Adiciona novas conexões a um system existente.
+    Atualiza as conexões associadas a um system, adicionando ou removendo vínculos conforme necessário.
     ---
     tags:
       - Systems
@@ -312,9 +235,10 @@ def add_connections_to_system(user_data):
               items:
                 type: integer
               example: [2, 3]
+              description: Lista de IDs de conexões para atualizar os vínculos.
     responses:
       200:
-        description: Conexões adicionadas com sucesso.
+        description: Conexões atualizadas com sucesso.
       400:
         description: Campos obrigatórios ausentes ou inválidos.
       404:
@@ -338,7 +262,7 @@ def add_connections_to_system(user_data):
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
 
-        # Verificar se o system existe
+        # Verificar se o sistema existe
         query_check_system = "SELECT id FROM systems WHERE id = %s"
         cursor.execute(query_check_system, (system_id,))
         if not cursor.fetchone():
@@ -346,20 +270,30 @@ def add_connections_to_system(user_data):
             conn.close()
             return jsonify({"status": "error", "message": "System não encontrado."}), 404
 
-        # Inserir as novas associações
-        added_connections = []
+        # Atualizar as associações
         for connection_id in connection_ids:
-            try:
+            # Verificar se a associação já existe
+            query_check_association = """
+                SELECT id FROM system_connections
+                WHERE system_id = %s AND connection_id = %s
+            """
+            cursor.execute(query_check_association, (system_id, connection_id))
+            association_exists = cursor.fetchone()
+
+            if association_exists:
+                # Remover a associação existente
+                query_delete = """
+                    DELETE FROM system_connections
+                    WHERE system_id = %s AND connection_id = %s
+                """
+                cursor.execute(query_delete, (system_id, connection_id))
+            else:
+                # Adicionar uma nova associação
                 query_insert = """
                     INSERT INTO system_connections (system_id, connection_id)
                     VALUES (%s, %s)
                 """
                 cursor.execute(query_insert, (system_id, connection_id))
-                added_connections.append(connection_id)
-            except Exception as e:
-                # Ignorar erros de duplicação (conexões já existentes)
-                if "Duplicate entry" not in str(e):
-                    raise
 
         conn.commit()
         cursor.close()
@@ -367,8 +301,99 @@ def add_connections_to_system(user_data):
 
         return jsonify({
             "status": "success",
-            "message": "Conexões adicionadas com sucesso.",
-            "added_connections": added_connections
+            "message": "Conexões atualizadas com sucesso.",
+            "system_id": system_id,
+            "connection_ids": connection_ids
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@system_bp.route('/profile/<int:id>', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/systems')
+def get_system_profile(user_data, id):
+    """
+    Retorna os detalhes de um sistema específico pelo seu ID.
+    ---
+    tags:
+      - Systems
+    parameters:
+      - name: id
+        in: path
+        required: true
+        type: integer
+        description: ID do sistema a ser buscado.
+        example: 1
+    responses:
+      200:
+        description: Detalhes do sistema encontrado.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            system:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                name:
+                  type: string
+                  example: "Sistema A"
+                connections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: "Conexão de Produção"
+      404:
+        description: Sistema não encontrado.
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar informações do sistema
+        query_system = "SELECT id, name FROM systems WHERE id = %s"
+        cursor.execute(query_system, (id,))
+        system = cursor.fetchone()
+
+        if not system:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Sistema não encontrado."}), 404
+
+        # Buscar conexões associadas ao sistema
+        query_connections = """
+            SELECT c.id, c.name
+            FROM connections c
+            JOIN system_connections sc ON c.id = sc.connection_id
+            WHERE sc.system_id = %s
+        """
+        cursor.execute(query_connections, (id,))
+        connections = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Montar resposta
+        return jsonify({
+            "status": "success",
+            "system": {
+                "id": system["id"],
+                "name": system["name"],
+                "connections": connections
+            }
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

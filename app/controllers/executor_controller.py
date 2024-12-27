@@ -84,39 +84,13 @@ def create_executor(user_data):
 @permission_required(route_prefix='/executors')
 def execute_query(user_data, executor_id):
     """
-    Executa a query salva em um executor para múltiplas conexões, com suporte à paginação.
-    ---
-    tags:
-      - Executors
-    parameters:
-      - name: executor_id
-        in: path
-        required: true
-        type: integer
-        description: ID do executor a ser executado.
-      - name: page
-        in: query
-        required: false
-        type: integer
-        description: Página atual para a paginação. Default: 1
-      - name: limit
-        in: query
-        required: false
-        type: integer
-        description: Número de registros por página. Default: 1000
-    responses:
-      200:
-        description: Resultado da execução da query.
-      404:
-        description: Executor não encontrado.
-      500:
-        description: Erro ao executar a query.
+    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros e paginação.
     """
     try:
         # Obter parâmetros de paginação da URL
-        page = int(request.args.get("page", 1))  # Página atual (default: 1)
-        limit = int(request.args.get("limit", 1000))  # Tamanho do limite (default: 1000)
-        offset = (page - 1) * limit  # Calcular o deslocamento (offset)
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 1000))
+        offset = (page - 1) * limit
 
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
@@ -133,10 +107,20 @@ def execute_query(user_data, executor_id):
 
         # Ler a query do arquivo
         with open(file_path, "r", encoding="utf-8") as file:
-            query = file.read()
+            query = file.read().rstrip(";")  # Remove qualquer ";" no final
 
-        # Remover qualquer ";" do final da query
-        query = query.rstrip(";")
+        # Buscar os parâmetros do executor
+        parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
+        cursor.execute(parameter_query, (executor_id,))
+        parameters = cursor.fetchall()
+
+        # Substituir os placeholders na query com os valores dos parâmetros
+        for param in parameters:
+            param_placeholder = f"@{param['name']}"
+            param_value = param["value"]
+            if param["type"].lower() in ["string", "date"]:
+                param_value = f"'{param_value}'"  # Envolver strings e datas em aspas
+            query = query.replace(param_placeholder, str(param_value))
 
         # Adicionar limites de paginação à query
         paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
@@ -161,8 +145,8 @@ def execute_query(user_data, executor_id):
             db_type = connection_data["db_type"]
             host = connection_data["host"]
             port = connection_data["port"]
-            username = connection_data["username"]
-            encrypted_password = connection_data["password"]  # A senha ainda criptografada
+            user = connection_data["username"]  # Substituímos username por user aqui
+            encrypted_password = connection_data["password"]
             database_name = connection_data["database_name"]
             service_name = connection_data.get("service_name", None)
             sid = connection_data.get("sid", None)
@@ -172,11 +156,11 @@ def execute_query(user_data, executor_id):
                 password = decrypt_password(encrypted_password)
 
                 if db_type == "mysql":
-                    db_conn = create_mysql_connection(host, port, username, password, database_name)
+                    db_conn = create_mysql_connection(host, port, user, password, database_name)
                     final_query = paginated_query_mysql
                 elif db_type == "oracle":
                     db_conn = create_oracle_connection(
-                        host=host, port=port, username=username, password=password,
+                        host=host, port=port, user=user, password=password,
                         service_name=service_name, sid=sid
                     )
                     final_query = paginated_query_oracle
