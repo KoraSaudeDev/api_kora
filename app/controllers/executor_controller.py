@@ -599,13 +599,15 @@ def execute_query(user_data, executor_id):
                 results[f"connection_{connection_id}"] = "Conexão não encontrada."
                 continue
 
+            # Recuperar o nome do banco de dados para usar como identificador
+            database_name = connection_data["database_name"]
+
             # Abrir a conexão com o banco
             db_type = connection_data["db_type"]
             host = connection_data["host"]
             port = connection_data["port"]
             user = connection_data["username"]
             encrypted_password = connection_data["password"]
-            database_name = connection_data["database_name"]
             service_name = connection_data.get("service_name", None)
             sid = connection_data.get("sid", None)
 
@@ -623,10 +625,10 @@ def execute_query(user_data, executor_id):
                     )
                     final_query = paginated_query_oracle
                 else:
-                    results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."
+                    results[database_name] = "Tipo de banco desconhecido."
                     continue
 
-                print(f"Executando a query na conexão {connection_id} com os parâmetros: {param_dict}")
+                print(f"Executando a query na conexão com banco '{database_name}' e parâmetros: {param_dict}")
 
                 db_cursor = db_conn.cursor()
                 db_cursor.execute(final_query, param_dict)
@@ -634,13 +636,13 @@ def execute_query(user_data, executor_id):
                 columns = [col[0] for col in db_cursor.description]
                 rows = [dict(zip(columns, row)) for row in db_cursor.fetchall()]
 
-                results[f"connection_{connection_id}"] = rows
+                results[database_name] = rows
 
                 db_cursor.close()
                 db_conn.close()
             except Exception as e:
-                print(f"Erro ao executar a query na conexão {connection_id}:", e)
-                results[f"connection_{connection_id}"] = str(e)
+                print(f"Erro ao executar a query na conexão com banco '{database_name}':", e)
+                results[database_name] = str(e)
 
         # Atualizar o campo executed_at
         update_query = "UPDATE executors SET executed_at = %s WHERE id = %s"
