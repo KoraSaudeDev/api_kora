@@ -592,15 +592,15 @@ def execute_query(user_data, executor_id):
 
         results = {}
         for connection_id in connection_ids:
-            cursor.execute("SELECT * FROM connections WHERE id = %s", (connection_id,))
+            # Buscar o nome da conexão na tabela `connections`
+            cursor.execute("SELECT name FROM connections WHERE id = %s", (connection_id,))
             connection_data = cursor.fetchone()
 
             if not connection_data:
-                results[f"connection_{connection_id}"] = "Conexão não encontrada."
+                results[f"Conexão_{connection_id}"] = "Conexão não encontrada."
                 continue
 
-            # Recuperar o nome do banco de dados para usar como identificador
-            database_name = connection_data["database_name"]
+            connection_name = connection_data["name"]
 
             # Abrir a conexão com o banco
             db_type = connection_data["db_type"]
@@ -608,6 +608,7 @@ def execute_query(user_data, executor_id):
             port = connection_data["port"]
             user = connection_data["username"]
             encrypted_password = connection_data["password"]
+            database_name = connection_data["database_name"]
             service_name = connection_data.get("service_name", None)
             sid = connection_data.get("sid", None)
 
@@ -625,10 +626,10 @@ def execute_query(user_data, executor_id):
                     )
                     final_query = paginated_query_oracle
                 else:
-                    results[database_name] = "Tipo de banco desconhecido."
+                    results[connection_name] = "Tipo de banco desconhecido."
                     continue
 
-                print(f"Executando a query na conexão com banco '{database_name}' e parâmetros: {param_dict}")
+                print(f"Executando a query na conexão '{connection_name}' com os parâmetros: {param_dict}")
 
                 db_cursor = db_conn.cursor()
                 db_cursor.execute(final_query, param_dict)
@@ -636,13 +637,13 @@ def execute_query(user_data, executor_id):
                 columns = [col[0] for col in db_cursor.description]
                 rows = [dict(zip(columns, row)) for row in db_cursor.fetchall()]
 
-                results[database_name] = rows
+                results[connection_name] = rows
 
                 db_cursor.close()
                 db_conn.close()
             except Exception as e:
-                print(f"Erro ao executar a query na conexão com banco '{database_name}':", e)
-                results[database_name] = str(e)
+                print(f"Erro ao executar a query na conexão '{connection_name}':", e)
+                results[connection_name] = str(e)
 
         # Atualizar o campo executed_at
         update_query = "UPDATE executors SET executed_at = %s WHERE id = %s"
