@@ -413,78 +413,60 @@ def validate_executor_parameters_route(user_data, executor_id):
         example: 1
     responses:
       200:
-        description: Parâmetros válidos.
-      400:
-        description: Erros de validação encontrados.
-      500:
-        description: Erro ao validar parâmetros.
+        description: Parâmetros validados.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "pending"
+            message:
+              type: string
+              example: "Alguns parâmetros precisam ser corrigidos."
+            parameters:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "P_DATA_INI"
+                  type:
+                    type: string
+                    example: "string"
+                  value:
+                    type: string
+                    example: ""
+                  is_valid:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "O parâmetro 'P_DATA_INI' está vazio e é obrigatório."
     """
     try:
         parameters = validate_executor_parameters(executor_id)
-        # Filtrar apenas os parâmetros inválidos
+
+        # Filtrar parâmetros inválidos
         invalid_parameters = [param for param in parameters if not param["is_valid"]]
 
         if invalid_parameters:
             return jsonify({
-                "status": "error",
-                "message": "Erros de validação encontrados.",
+                "status": "pending",
+                "message": "Alguns parâmetros precisam ser corrigidos.",
                 "parameters": invalid_parameters
-            }), 400
+            }), 200
 
-        return jsonify({"status": "success", "message": "Todos os parâmetros estão válidos."}), 200
+        return jsonify({
+            "status": "success",
+            "message": "Todos os parâmetros estão válidos."
+        }), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": f"Erro ao validar parâmetros: {e}"
+        }), 500
 
-def validate_executor_parameters(executor_id):
-    """
-    Valida os parâmetros de um executor.
-    Retorna uma lista de parâmetros com seus status de validação.
-    """
-    try:
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        # Buscar parâmetros do executor
-        query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
-        cursor.execute(query, (executor_id,))
-        parameters = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
-
-        result = []
-        for param in parameters:
-            is_valid = True
-            error = None
-
-            if param["value"] in (None, ""):
-                is_valid = False
-                error = f"O parâmetro '{param['name']}' está vazio e é obrigatório."
-            elif param["type"].lower() == "integer" and not str(param["value"]).isdigit():
-                is_valid = False
-                error = f"O parâmetro '{param['name']}' deve ser um número inteiro."
-            elif param["type"].lower() == "string" and not isinstance(param["value"], str):
-                is_valid = False
-                error = f"O parâmetro '{param['name']}' deve ser uma string."
-            elif param["type"].lower() == "date":
-                try:
-                    # Validar formato de data
-                    datetime.strptime(param["value"], "%Y-%m-%d")
-                except ValueError:
-                    is_valid = False
-                    error = f"O parâmetro '{param['name']}' deve estar no formato 'YYYY-MM-DD'."
-
-            result.append({
-                "name": param["name"],
-                "type": param["type"],
-                "value": param["value"],
-                "is_valid": is_valid,
-                "error": error if not is_valid else None
-            })
-
-        return result
-    except Exception as e:
-        return [{"error": f"Erro ao validar parâmetros: {e}"}]
 
 def validate_executor_parameters(executor_id):
     """
@@ -541,7 +523,13 @@ def validate_executor_parameters(executor_id):
 
         return validation_results
     except Exception as e:
-        return [{"name": "unknown", "type": "unknown", "value": None, "is_valid": False, "error": f"Erro ao validar parâmetros: {e}"}]
+        return [{
+            "name": "unknown",
+            "type": "unknown",
+            "value": None,
+            "is_valid": False,
+            "error": f"Erro ao validar parâmetros: {e}"
+        }]
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
@@ -549,20 +537,20 @@ def validate_executor_parameters(executor_id):
 @permission_required(route_prefix='/executors')
 def execute_query(user_data, executor_id):
     """
-    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros e paginação.
+    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros enviados na requisição.
     """
     try:
-        # Obter parâmetros fornecidos na requisição
-        user_provided_params = request.json.get("parameters", {})
-        print("Parâmetros fornecidos pelo usuário:", user_provided_params)
+        # Obter parâmetros enviados pelo usuário
+        request_data = request.json or {}
+        user_parameters = request_data.get("parameters", {})
 
-        # Validar os parâmetros armazenados no banco
-        validation_errors = validate_executor_parameters(executor_id)
-        if validation_errors:
+        # Validar os parâmetros
+        errors = validate_executor_parameters_with_user_input(executor_id, user_parameters)
+        if errors:
             return jsonify({
                 "status": "error",
                 "message": "Erro de validação nos parâmetros.",
-                "errors": validation_errors
+                "errors": errors
             }), 400
 
         # Obter parâmetros de paginação da URL
@@ -578,7 +566,6 @@ def execute_query(user_data, executor_id):
         executor = cursor.fetchone()
 
         if not executor:
-            print("Executor não encontrado.")
             return jsonify({"status": "error", "message": "Executor não encontrado."}), 404
 
         connection_ids = executor["connection_ids"].split(",")
@@ -587,31 +574,20 @@ def execute_query(user_data, executor_id):
         # Ler a query do arquivo
         with open(file_path, "r", encoding="utf-8") as file:
             query = file.read().rstrip(";")  # Remove qualquer ";" no final
-        print(f"Query original carregada: {query}")
 
-        # Buscar parâmetros do banco e mesclar com os fornecidos pelo usuário
+        # Buscar e substituir parâmetros na query
         parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
         cursor.execute(parameter_query, (executor_id,))
-        db_parameters = cursor.fetchall()
+        parameters = cursor.fetchall()
 
         param_dict = {}
-        for param in db_parameters:
-            param_placeholder = f":{param['name']}"
-            db_value = param["value"]
-            user_value = user_provided_params.get(param["name"])
+        for param in parameters:
+            param_name = param["name"]
+            param_placeholder = f":{param_name}"
 
-            # Usar o valor fornecido pelo usuário se disponível, caso contrário, usar o valor do banco
-            final_value = user_value if user_value not in (None, "") else db_value
-            if final_value in (None, ""):
-                return jsonify({
-                    "status": "error",
-                    "message": f"Parâmetro obrigatório '{param['name']}' não possui valor."
-                }), 400
-
-            param_dict[param_placeholder] = final_value
-            print(f"Definido: {param_placeholder} -> {final_value}")
-
-        print("Parâmetros finais para a query:", param_dict)
+            # Priorizar valor enviado pelo usuário
+            param_value = user_parameters.get(param_name, param["value"])
+            param_dict[param_placeholder] = param_value
 
         # Adicionar limites de paginação à query
         paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
@@ -622,8 +598,6 @@ def execute_query(user_data, executor_id):
         )
         WHERE rnum > {offset}
         """
-        print("Query paginada MySQL:", paginated_query_mysql)
-        print("Query paginada Oracle:", paginated_query_oracle)
 
         results = {}
         for connection_id in connection_ids:
@@ -661,8 +635,6 @@ def execute_query(user_data, executor_id):
                     results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."
                     continue
 
-                print(f"Executando a query na conexão {connection_id} (tipo: {db_type}) com os parâmetros:", param_dict)
-
                 db_cursor = db_conn.cursor()
                 db_cursor.execute(final_query, param_dict)
 
@@ -674,7 +646,6 @@ def execute_query(user_data, executor_id):
                 db_cursor.close()
                 db_conn.close()
             except Exception as e:
-                print(f"Erro ao executar a query na conexão {connection_id}:", e)
                 results[f"connection_{connection_id}"] = str(e)
 
         # Atualizar o campo executed_at
@@ -685,8 +656,64 @@ def execute_query(user_data, executor_id):
         cursor.close()
         conn.close()
 
-        print("Resultados finais da execução:", results)
         return jsonify({"status": "success", "data": results}), 200
     except Exception as e:
-        print("Erro durante a execução da query:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+def validate_executor_parameters_with_user_input(executor_id, user_parameters):
+    """
+    Valida os parâmetros de um executor, considerando os valores enviados pelo usuário.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar parâmetros do executor
+        query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
+        cursor.execute(query, (executor_id,))
+        parameters = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        errors = []
+        for param in parameters:
+            param_name = param["name"]
+            param_value = user_parameters.get(param_name, param["value"])  # Prioriza o valor do usuário
+
+            if param_value in (None, ""):
+                errors.append({
+                    "name": param_name,
+                    "type": param["type"],
+                    "error": f"O parâmetro '{param_name}' está vazio e é obrigatório."
+                })
+            elif param["type"].lower() == "integer" and not str(param_value).isdigit():
+                errors.append({
+                    "name": param_name,
+                    "type": param["type"],
+                    "error": f"O parâmetro '{param_name}' deve ser um número inteiro."
+                })
+            elif param["type"].lower() == "string" and not isinstance(param_value, str):
+                errors.append({
+                    "name": param_name,
+                    "type": param["type"],
+                    "error": f"O parâmetro '{param_name}' deve ser uma string."
+                })
+            elif param["type"].lower() == "date":
+                try:
+                    datetime.strptime(param_value, "%Y-%m-%d")
+                except ValueError:
+                    errors.append({
+                        "name": param_name,
+                        "type": param["type"],
+                        "error": f"O parâmetro '{param_name}' deve estar no formato 'YYYY-MM-DD'."
+                    })
+
+        return errors
+    except Exception as e:
+        return [{
+            "name": None,
+            "type": None,
+            "error": f"Erro ao validar parâmetros: {e}"
+        }]
