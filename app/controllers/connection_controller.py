@@ -324,3 +324,94 @@ def list_connections_simple(user_data):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+      
+@connection_bp.route('/connections/<int:system_id>', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/routes')
+def list_connections_by_system(user_data, system_id):
+    """
+    Lista todas as conexões associadas a um sistema específico.
+    ---
+    tags:
+      - Systems
+    parameters:
+      - name: system_id
+        in: path
+        required: true
+        type: integer
+        description: ID do sistema para buscar as conexões associadas.
+        example: 1
+    responses:
+      200:
+        description: Lista de conexões associadas ao sistema.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            system_id:
+              type: integer
+              example: 1
+            connections:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  name:
+                    type: string
+                    example: "Conexão X"
+                  host:
+                    type: string
+                    example: "localhost"
+                  port:
+                    type: integer
+                    example: 3306
+                  db_type:
+                    type: string
+                    example: "mysql"
+      404:
+        description: Sistema não encontrado ou sem conexões associadas.
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar os IDs das conexões associadas ao sistema
+        query_connections = """
+            SELECT connection_id
+            FROM system_connections
+            WHERE system_id = %s
+        """
+        cursor.execute(query_connections, (system_id,))
+        connection_ids = [row['connection_id'] for row in cursor.fetchall()]
+
+        if not connection_ids:
+            return jsonify({"status": "error", "message": "Sistema não encontrado ou sem conexões associadas."}), 404
+
+        # Buscar detalhes das conexões usando os IDs obtidos
+        query_details = """
+            SELECT id, name, host, port, db_type
+            FROM connections
+            WHERE id IN (%s)
+        """ % ",".join(["%s"] * len(connection_ids))
+        cursor.execute(query_details, connection_ids)
+        connections = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "system_id": system_id,
+            "connections": connections
+        }), 200
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
