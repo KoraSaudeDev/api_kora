@@ -413,33 +413,78 @@ def validate_executor_parameters_route(user_data, executor_id):
         example: 1
     responses:
       200:
-        description: Detalhes de validação dos parâmetros.
+        description: Parâmetros válidos.
       400:
         description: Erros de validação encontrados.
       500:
         description: Erro ao validar parâmetros.
     """
     try:
-        validation_results = validate_executor_parameters(executor_id)
-        
-        # Verificar se há erros nos parâmetros
-        has_errors = any(not param['is_valid'] for param in validation_results)
+        parameters = validate_executor_parameters(executor_id)
+        # Filtrar apenas os parâmetros inválidos
+        invalid_parameters = [param for param in parameters if not param["is_valid"]]
 
-        if has_errors:
+        if invalid_parameters:
             return jsonify({
                 "status": "error",
                 "message": "Erros de validação encontrados.",
-                "parameters": validation_results
+                "parameters": invalid_parameters
             }), 400
 
-        return jsonify({
-            "status": "success",
-            "message": "Todos os parâmetros estão válidos.",
-            "parameters": validation_results
-        }), 200
+        return jsonify({"status": "success", "message": "Todos os parâmetros estão válidos."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+def validate_executor_parameters(executor_id):
+    """
+    Valida os parâmetros de um executor.
+    Retorna uma lista de parâmetros com seus status de validação.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar parâmetros do executor
+        query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
+        cursor.execute(query, (executor_id,))
+        parameters = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        result = []
+        for param in parameters:
+            is_valid = True
+            error = None
+
+            if param["value"] in (None, ""):
+                is_valid = False
+                error = f"O parâmetro '{param['name']}' está vazio e é obrigatório."
+            elif param["type"].lower() == "integer" and not str(param["value"]).isdigit():
+                is_valid = False
+                error = f"O parâmetro '{param['name']}' deve ser um número inteiro."
+            elif param["type"].lower() == "string" and not isinstance(param["value"], str):
+                is_valid = False
+                error = f"O parâmetro '{param['name']}' deve ser uma string."
+            elif param["type"].lower() == "date":
+                try:
+                    # Validar formato de data
+                    datetime.strptime(param["value"], "%Y-%m-%d")
+                except ValueError:
+                    is_valid = False
+                    error = f"O parâmetro '{param['name']}' deve estar no formato 'YYYY-MM-DD'."
+
+            result.append({
+                "name": param["name"],
+                "type": param["type"],
+                "value": param["value"],
+                "is_valid": is_valid,
+                "error": error if not is_valid else None
+            })
+
+        return result
+    except Exception as e:
+        return [{"error": f"Erro ao validar parâmetros: {e}"}]
 
 def validate_executor_parameters(executor_id):
     """
