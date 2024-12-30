@@ -381,3 +381,93 @@ def get_system_profile(user_data, id):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@system_bp.route('/details/<int:id>', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/systems')
+def get_system_details(user_data, id):
+    """
+    Retorna os detalhes de um sistema específico pelo seu ID.
+    ---
+    tags:
+      - Systems
+    parameters:
+      - name: id
+        in: path
+        required: true
+        type: integer
+        description: ID do sistema a ser buscado.
+        example: 1
+    responses:
+      200:
+        description: Detalhes do sistema encontrado.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "success"
+            system:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  example: 1
+                name:
+                  type: string
+                  example: "Sistema A"
+                connections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: "Conexão de Produção"
+      404:
+        description: Sistema não encontrado.
+      500:
+        description: Erro interno no servidor.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar informações do sistema
+        query_system = "SELECT id, name FROM systems WHERE id = %s"
+        cursor.execute(query_system, (id,))
+        system = cursor.fetchone()
+
+        if not system:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Sistema não encontrado."}), 404
+
+        # Buscar conexões associadas ao sistema
+        query_connections = """
+            SELECT c.id, c.name
+            FROM connections c
+            JOIN system_connections sc ON c.id = sc.connection_id
+            WHERE sc.system_id = %s
+        """
+        cursor.execute(query_connections, (id,))
+        connections = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Montar resposta
+        return jsonify({
+            "status": "success",
+            "system": {
+                "id": system["id"],
+                "name": system["name"],
+                "connections": connections
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
