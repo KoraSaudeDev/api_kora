@@ -65,11 +65,16 @@ def create_executor(user_data):
         file_path = os.path.join(system_folder, f"{name}.sql")
         print("Caminho do arquivo SQL:", file_path)
 
-        # Salvar a query no arquivo
         try:
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(query)
             print("Arquivo SQL salvo com sucesso.")
+            
+            # Verificar se o arquivo foi criado
+            if os.path.exists(file_path):
+                print(f"Arquivo criado com sucesso: {file_path}")
+            else:
+                print(f"Erro: Arquivo não foi encontrado após tentativa de criação: {file_path}")
         except Exception as e:
             print("Erro ao salvar o arquivo SQL:", e)
             return jsonify({"status": "error", "message": f"Erro ao salvar o arquivo SQL: {e}"}), 500
