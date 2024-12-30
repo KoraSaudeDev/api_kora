@@ -34,6 +34,12 @@ def create_executor(user_data):
             print("Erro: Campos obrigatórios ausentes.")
             return jsonify({"status": "error", "message": "Todos os campos são obrigatórios."}), 400
 
+        # Substituir os placeholders de parâmetros de '@nome' para ':nome'
+        for param in parameters:
+            placeholder = f"@{param['name']}"
+            new_placeholder = f":{param['name']}"
+            query = query.replace(placeholder, new_placeholder)
+
         # Remove o ';' do final da query, se existir
         query = query.rstrip(';')
         print("Query ajustada:", query)
@@ -69,7 +75,7 @@ def create_executor(user_data):
             with open(file_path, "w", encoding="utf-8") as file:
                 file.write(query)
             print("Arquivo SQL salvo com sucesso.")
-            
+
             # Verificar se o arquivo foi criado
             if os.path.exists(file_path):
                 print(f"Arquivo criado com sucesso: {file_path}")
@@ -388,7 +394,6 @@ def list_executors_by_system(user_data, system_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @executor_bp.route('/validate/<int:executor_id>', methods=['GET'])
 @token_required
 @admin_required
@@ -427,7 +432,6 @@ def validate_executor_parameters_route(user_data, executor_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 def validate_executor_parameters(executor_id):
     """
     Valida os parâmetros de um executor.
@@ -463,7 +467,6 @@ def validate_executor_parameters(executor_id):
         return errors
     except Exception as e:
         return [f"Erro ao validar parâmetros: {e}"]
-
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
