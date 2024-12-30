@@ -413,29 +413,38 @@ def validate_executor_parameters_route(user_data, executor_id):
         example: 1
     responses:
       200:
-        description: Parâmetros válidos.
+        description: Detalhes de validação dos parâmetros.
       400:
         description: Erros de validação encontrados.
       500:
         description: Erro ao validar parâmetros.
     """
     try:
-        errors = validate_executor_parameters(executor_id)
-        if errors:
+        validation_results = validate_executor_parameters(executor_id)
+        
+        # Verificar se há erros nos parâmetros
+        has_errors = any(not param['is_valid'] for param in validation_results)
+
+        if has_errors:
             return jsonify({
                 "status": "error",
                 "message": "Erros de validação encontrados.",
-                "errors": errors
+                "parameters": validation_results
             }), 400
 
-        return jsonify({"status": "success", "message": "Todos os parâmetros estão válidos."}), 200
+        return jsonify({
+            "status": "success",
+            "message": "Todos os parâmetros estão válidos.",
+            "parameters": validation_results
+        }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 def validate_executor_parameters(executor_id):
     """
     Valida os parâmetros de um executor.
-    Retorna uma lista de erros se algum parâmetro estiver inválido.
+    Retorna uma lista de objetos detalhando a validação de cada parâmetro.
     """
     try:
         conn = create_db_connection_mysql()
@@ -449,24 +458,45 @@ def validate_executor_parameters(executor_id):
         cursor.close()
         conn.close()
 
-        errors = []
+        validation_results = []
         for param in parameters:
+            param_result = {
+                "name": param["name"],
+                "type": param["type"],
+                "value": param["value"],
+                "is_valid": True,
+                "error": None
+            }
+
+            # Validar se o valor está vazio
             if param["value"] in (None, ""):
-                errors.append(f"Parâmetro '{param['name']}' está vazio e é obrigatório.")
-            elif param["type"].lower() == "integer" and not str(param["value"]).isdigit():
-                errors.append(f"Parâmetro '{param['name']}' deve ser um número inteiro.")
-            elif param["type"].lower() == "string" and not isinstance(param["value"], str):
-                errors.append(f"Parâmetro '{param['name']}' deve ser uma string.")
+                param_result["is_valid"] = False
+                param_result["error"] = f"O parâmetro '{param['name']}' está vazio e é obrigatório."
+            
+            # Validar tipos
+            elif param["type"].lower() == "integer":
+                if not str(param["value"]).isdigit():
+                    param_result["is_valid"] = False
+                    param_result["error"] = f"O parâmetro '{param['name']}' deve ser um número inteiro."
+            
+            elif param["type"].lower() == "string":
+                if not isinstance(param["value"], str):
+                    param_result["is_valid"] = False
+                    param_result["error"] = f"O parâmetro '{param['name']}' deve ser uma string."
+            
             elif param["type"].lower() == "date":
                 try:
                     # Validar formato de data
                     datetime.strptime(param["value"], "%Y-%m-%d")
                 except ValueError:
-                    errors.append(f"Parâmetro '{param['name']}' deve estar no formato 'YYYY-MM-DD'.")
+                    param_result["is_valid"] = False
+                    param_result["error"] = f"O parâmetro '{param['name']}' deve estar no formato 'YYYY-MM-DD'."
 
-        return errors
+            validation_results.append(param_result)
+
+        return validation_results
     except Exception as e:
-        return [f"Erro ao validar parâmetros: {e}"]
+        return [{"name": "unknown", "type": "unknown", "value": None, "is_valid": False, "error": f"Erro ao validar parâmetros: {e}"}]
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
@@ -477,13 +507,17 @@ def execute_query(user_data, executor_id):
     Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros e paginação.
     """
     try:
-        # Validar os parâmetros
-        errors = validate_executor_parameters(executor_id)
-        if errors:
+        # Obter parâmetros fornecidos na requisição
+        user_provided_params = request.json.get("parameters", {})
+        print("Parâmetros fornecidos pelo usuário:", user_provided_params)
+
+        # Validar os parâmetros armazenados no banco
+        validation_errors = validate_executor_parameters(executor_id)
+        if validation_errors:
             return jsonify({
                 "status": "error",
                 "message": "Erro de validação nos parâmetros.",
-                "errors": errors
+                "errors": validation_errors
             }), 400
 
         # Obter parâmetros de paginação da URL
@@ -510,17 +544,27 @@ def execute_query(user_data, executor_id):
             query = file.read().rstrip(";")  # Remove qualquer ";" no final
         print(f"Query original carregada: {query}")
 
-        # Buscar e substituir parâmetros na query
+        # Buscar parâmetros do banco e mesclar com os fornecidos pelo usuário
         parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
         cursor.execute(parameter_query, (executor_id,))
-        parameters = cursor.fetchall()
+        db_parameters = cursor.fetchall()
 
         param_dict = {}
-        for param in parameters:
+        for param in db_parameters:
             param_placeholder = f":{param['name']}"
-            param_value = param["value"]
-            param_dict[param_placeholder] = param_value
-            print(f"Substituindo placeholder {param_placeholder} com valor {param_value}.")
+            db_value = param["value"]
+            user_value = user_provided_params.get(param["name"])
+
+            # Usar o valor fornecido pelo usuário se disponível, caso contrário, usar o valor do banco
+            final_value = user_value if user_value not in (None, "") else db_value
+            if final_value in (None, ""):
+                return jsonify({
+                    "status": "error",
+                    "message": f"Parâmetro obrigatório '{param['name']}' não possui valor."
+                }), 400
+
+            param_dict[param_placeholder] = final_value
+            print(f"Definido: {param_placeholder} -> {final_value}")
 
         print("Parâmetros finais para a query:", param_dict)
 
