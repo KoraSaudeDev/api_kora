@@ -107,122 +107,6 @@ def create_executor(user_data):
         print("Erro durante a criação do executor:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
-@executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/executors')
-def execute_query(user_data, executor_id):
-    """
-    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros e paginação.
-    """
-    try:
-        # Obter parâmetros de paginação da URL
-        page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 1000))
-        offset = (page - 1) * limit
-
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        # Buscar informações do executor
-        cursor.execute("SELECT * FROM executors WHERE id = %s", (executor_id,))
-        executor = cursor.fetchone()
-
-        if not executor:
-            return jsonify({"status": "error", "message": "Executor não encontrado."}), 404
-
-        connection_ids = executor["connection_ids"].split(",")
-        file_path = executor["file_path"]
-
-        # Ler a query do arquivo
-        with open(file_path, "r", encoding="utf-8") as file:
-            query = file.read().rstrip(";")  # Remove qualquer ";" no final
-
-        # Buscar os parâmetros do executor
-        parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
-        cursor.execute(parameter_query, (executor_id,))
-        parameters = cursor.fetchall()
-
-        # Substituir os placeholders na query com os valores dos parâmetros
-        for param in parameters:
-            param_placeholder = f"@{param['name']}"
-            param_value = param["value"]
-            if param["type"].lower() in ["string", "date"]:
-                param_value = f"'{param_value}'"  # Envolver strings e datas em aspas
-            query = query.replace(param_placeholder, str(param_value))
-
-        # Adicionar limites de paginação à query
-        paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
-        paginated_query_oracle = f"""
-        SELECT * FROM (
-            SELECT a.*, ROWNUM rnum FROM ({query}) a
-            WHERE ROWNUM <= {offset + limit}
-        )
-        WHERE rnum > {offset}
-        """
-
-        results = {}
-        for connection_id in connection_ids:
-            cursor.execute("SELECT * FROM connections WHERE id = %s", (connection_id,))
-            connection_data = cursor.fetchone()
-
-            if not connection_data:
-                results[f"connection_{connection_id}"] = "Conexão não encontrada."
-                continue
-
-            # Abrir a conexão com o banco
-            db_type = connection_data["db_type"]
-            host = connection_data["host"]
-            port = connection_data["port"]
-            user = connection_data["username"]  # Substituímos username por user aqui
-            encrypted_password = connection_data["password"]
-            database_name = connection_data["database_name"]
-            service_name = connection_data.get("service_name", None)
-            sid = connection_data.get("sid", None)
-
-            try:
-                # Descriptografar a senha
-                password = decrypt_password(encrypted_password)
-
-                if db_type == "mysql":
-                    db_conn = create_mysql_connection(host, port, user, password, database_name)
-                    final_query = paginated_query_mysql
-                elif db_type == "oracle":
-                    db_conn = create_oracle_connection(
-                        host=host, port=port, user=user, password=password,
-                        service_name=service_name, sid=sid
-                    )
-                    final_query = paginated_query_oracle
-                else:
-                    results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."
-                    continue
-
-                db_cursor = db_conn.cursor()
-                db_cursor.execute(final_query)
-
-                columns = [col[0] for col in db_cursor.description]
-                rows = [dict(zip(columns, row)) for row in db_cursor.fetchall()]
-
-                results[f"connection_{connection_id}"] = rows
-
-                db_cursor.close()
-                db_conn.close()
-            except Exception as e:
-                results[f"connection_{connection_id}"] = str(e)
-
-        # Atualizar o campo executed_at
-        update_query = "UPDATE executors SET executed_at = %s WHERE id = %s"
-        cursor.execute(update_query, (datetime.now(), executor_id))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "data": results}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 @executor_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
@@ -499,6 +383,7 @@ def list_executors_by_system(user_data, system_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 @executor_bp.route('/validate/<int:executor_id>', methods=['GET'])
 @token_required
 @admin_required
@@ -537,6 +422,7 @@ def validate_executor_parameters_route(user_data, executor_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
 def validate_executor_parameters(executor_id):
     """
     Valida os parâmetros de um executor.
@@ -572,6 +458,7 @@ def validate_executor_parameters(executor_id):
         return errors
     except Exception as e:
         return [f"Erro ao validar parâmetros: {e}"]
+
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
