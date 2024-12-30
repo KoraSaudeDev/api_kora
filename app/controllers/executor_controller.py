@@ -592,25 +592,26 @@ def execute_query(user_data, executor_id):
 
         results = {}
         for connection_id in connection_ids:
-            # Buscar o nome da conexão na tabela `connections`
-            cursor.execute("SELECT name FROM connections WHERE id = %s", (connection_id,))
+            # Buscar detalhes da conexão e garantir que 'db_type' esteja presente
+            cursor.execute("""
+                SELECT name, db_type, host, port, username, password, database_name, service_name, sid
+                FROM connections WHERE id = %s
+            """, (connection_id,))
             connection_data = cursor.fetchone()
 
             if not connection_data:
-                results[f"Conexão_{connection_id}"] = "Conexão não encontrada."
+                results[f"connection_{connection_id}"] = "Conexão não encontrada."
                 continue
 
             connection_name = connection_data["name"]
-
-            # Abrir a conexão com o banco
             db_type = connection_data["db_type"]
             host = connection_data["host"]
             port = connection_data["port"]
             user = connection_data["username"]
             encrypted_password = connection_data["password"]
-            database_name = connection_data["database_name"]
-            service_name = connection_data.get("service_name", None)
-            sid = connection_data.get("sid", None)
+            database_name = connection_data.get("database_name")
+            service_name = connection_data.get("service_name")
+            sid = connection_data.get("sid")
 
             try:
                 # Descriptografar a senha
@@ -657,6 +658,7 @@ def execute_query(user_data, executor_id):
     except Exception as e:
         print("Erro durante a execução da query:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 def validate_executor_parameters_with_user_input(executor_id, user_parameters):
     """
