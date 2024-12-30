@@ -536,7 +536,8 @@ def validate_executor_parameters(executor_id):
 @permission_required(route_prefix='/executors')
 def execute_query(user_data, executor_id):
     """
-    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros enviados na requisição.
+    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros enviados na requisição,
+    e retorna informações de paginação.
     """
     try:
         # Obter parâmetros enviados pelo usuário
@@ -584,6 +585,12 @@ def execute_query(user_data, executor_id):
         param_dict = {f":{param['name']}": param["value"] for param in parameters}
         print(f"Parâmetros aplicados na query: {param_dict}")
 
+        # Adicionar query para contar o total de registros
+        count_query_mysql = f"SELECT COUNT(*) AS total FROM ({query}) AS subquery"
+        count_query_oracle = f"""
+        SELECT COUNT(*) AS total FROM ({query}) subquery
+        """
+
         # Adicionar limites de paginação à query
         paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
         paginated_query_oracle = f"""
@@ -595,8 +602,8 @@ def execute_query(user_data, executor_id):
         """
 
         results = {}
+        total_records = {}
         for connection_id in connection_ids:
-            # Buscar detalhes da conexão e garantir que 'db_type' esteja presente
             cursor.execute("""
                 SELECT name, db_type, host, port, username, password, database_name, service_name, sid
                 FROM connections WHERE id = %s
@@ -624,19 +631,26 @@ def execute_query(user_data, executor_id):
                 if db_type == "mysql":
                     db_conn = create_mysql_connection(host, port, user, password, database_name)
                     final_query = paginated_query_mysql
+                    count_query = count_query_mysql
                 elif db_type == "oracle":
                     db_conn = create_oracle_connection(
                         host=host, port=port, user=user, password=password,
                         service_name=service_name, sid=sid
                     )
                     final_query = paginated_query_oracle
+                    count_query = count_query_oracle
                 else:
                     results[connection_name] = "Tipo de banco desconhecido."
                     continue
 
                 print(f"Executando a query na conexão '{connection_name}' com os parâmetros: {param_dict}")
 
+                # Contar o número total de registros
                 db_cursor = db_conn.cursor()
+                db_cursor.execute(count_query, param_dict)
+                total_records[connection_name] = db_cursor.fetchone()[0]
+
+                # Executar a query paginada
                 db_cursor.execute(final_query, param_dict)
 
                 columns = [col[0] for col in db_cursor.description]
@@ -650,6 +664,16 @@ def execute_query(user_data, executor_id):
                 print(f"Erro ao executar a query na conexão '{connection_name}':", e)
                 results[connection_name] = str(e)
 
+        # Calcular total de páginas para cada conexão
+        pagination_info = {
+            name: {
+                "total_records": total_records[name],
+                "total_pages": (total_records[name] + limit - 1) // limit,  # Round up
+                "current_page": page
+            }
+            for name in total_records
+        }
+
         # Atualizar o campo executed_at
         update_query = "UPDATE executors SET executed_at = %s WHERE id = %s"
         cursor.execute(update_query, (datetime.now(), executor_id))
@@ -658,7 +682,11 @@ def execute_query(user_data, executor_id):
         cursor.close()
         conn.close()
 
-        return jsonify({"status": "success", "data": results}), 200
+        return jsonify({
+            "status": "success",
+            "data": results,
+            "pagination": pagination_info
+        }), 200
     except Exception as e:
         print("Erro durante a execução da query:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
