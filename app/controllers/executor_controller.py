@@ -18,6 +18,7 @@ def create_executor(user_data):
     Cria um executor e salva a query em um arquivo .sql.
     """
     try:
+        # Obter os dados da requisição
         data = request.json
         system_id = data.get("system_id")
         connection_ids = data.get("connection_ids")
@@ -25,34 +26,55 @@ def create_executor(user_data):
         query = data.get("query")
         parameters = data.get("parameters", [])  # Lista de parâmetros
 
+        # Log dos dados recebidos
+        print("Dados recebidos:", json.dumps(data, indent=4))
+
+        # Validar campos obrigatórios
         if not all([system_id, connection_ids, name, query]):
+            print("Erro: Campos obrigatórios ausentes.")
             return jsonify({"status": "error", "message": "Todos os campos são obrigatórios."}), 400
 
         # Remove o ';' do final da query, se existir
         query = query.rstrip(';')
+        print("Query ajustada:", query)
 
+        # Conexão com o banco de dados
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
+
+        # Verificar se o sistema existe
         cursor.execute("SELECT name FROM systems WHERE id = %s", (system_id,))
         system = cursor.fetchone()
+        print("Sistema encontrado:", system)
 
         if not system:
+            print("Erro: Sistema não encontrado.")
             return jsonify({"status": "error", "message": "System não encontrado."}), 404
 
         system_name = system["name"]
 
-        # Criar a pasta se não existir
+        # Criar a pasta do sistema se não existir
         system_folder = os.path.join("app", "queries", system_name)
-        os.makedirs(system_folder, exist_ok=True)
+        if not os.path.exists(system_folder):
+            os.makedirs(system_folder)
+            print("Pasta do sistema criada:", system_folder)
+        else:
+            print("Pasta do sistema já existe:", system_folder)
 
         # Caminho completo do arquivo
         file_path = os.path.join(system_folder, f"{name}.sql")
+        print("Caminho do arquivo SQL:", file_path)
 
-        # Salvar o arquivo
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(query)
+        # Salvar a query no arquivo
+        try:
+            with open(file_path, "w", encoding="utf-8") as file:
+                file.write(query)
+            print("Arquivo SQL salvo com sucesso.")
+        except Exception as e:
+            print("Erro ao salvar o arquivo SQL:", e)
+            return jsonify({"status": "error", "message": f"Erro ao salvar o arquivo SQL: {e}"}), 500
 
-        # Salvar no banco de dados
+        # Salvar o executor no banco de dados
         connection_ids_str = ",".join(map(str, connection_ids))
         query_insert = """
             INSERT INTO executors (system_id, connection_ids, name, file_path)
@@ -60,6 +82,7 @@ def create_executor(user_data):
         """
         cursor.execute(query_insert, (system_id, connection_ids_str, name, file_path))
         executor_id = cursor.lastrowid  # Obter o ID do executor criado
+        print("Executor salvo no banco de dados. ID:", executor_id)
 
         # Salvar parâmetros no banco
         if parameters:
@@ -69,14 +92,21 @@ def create_executor(user_data):
             """
             for param in parameters:
                 cursor.execute(parameter_query, (executor_id, param["name"], param["type"], param["value"]))
+            print("Parâmetros do executor salvos no banco de dados.")
 
+        # Confirmar as alterações no banco
         conn.commit()
+        print("Alterações confirmadas no banco de dados.")
+
         cursor.close()
         conn.close()
 
+        print("Executor criado com sucesso.")
         return jsonify({"status": "success", "message": "Executor criado com sucesso.", "executor_id": executor_id}), 201
     except Exception as e:
+        print("Erro durante a criação do executor:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
@@ -466,5 +496,202 @@ def list_executors_by_system(user_data, system_id):
             "total": total_count,
             "executors": response
         }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@executor_bp.route('/validate/<int:executor_id>', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/executors')
+def validate_executor_parameters_route(user_data, executor_id):
+    """
+    Valida os parâmetros de um executor antes da execução.
+    ---
+    tags:
+      - Executors
+    parameters:
+      - name: executor_id
+        in: path
+        required: true
+        type: integer
+        description: ID do executor para validar os parâmetros.
+        example: 1
+    responses:
+      200:
+        description: Parâmetros válidos.
+      400:
+        description: Erros de validação encontrados.
+      500:
+        description: Erro ao validar parâmetros.
+    """
+    try:
+        errors = validate_executor_parameters(executor_id)
+        if errors:
+            return jsonify({
+                "status": "error",
+                "message": "Erros de validação encontrados.",
+                "errors": errors
+            }), 400
+
+        return jsonify({"status": "success", "message": "Todos os parâmetros estão válidos."}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def validate_executor_parameters(executor_id):
+    """
+    Valida os parâmetros de um executor.
+    Retorna uma lista de erros se algum parâmetro estiver inválido.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar parâmetros do executor
+        query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
+        cursor.execute(query, (executor_id,))
+        parameters = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        errors = []
+        for param in parameters:
+            if param["value"] in (None, ""):
+                errors.append(f"Parâmetro '{param['name']}' está vazio e é obrigatório.")
+            elif param["type"].lower() == "integer" and not str(param["value"]).isdigit():
+                errors.append(f"Parâmetro '{param['name']}' deve ser um número inteiro.")
+            elif param["type"].lower() == "string" and not isinstance(param["value"], str):
+                errors.append(f"Parâmetro '{param['name']}' deve ser uma string.")
+            elif param["type"].lower() == "date":
+                try:
+                    # Validar formato de data
+                    datetime.strptime(param["value"], "%Y-%m-%d")
+                except ValueError:
+                    errors.append(f"Parâmetro '{param['name']}' deve estar no formato 'YYYY-MM-DD'.")
+
+        return errors
+    except Exception as e:
+        return [f"Erro ao validar parâmetros: {e}"]
+
+@executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/executors')
+def execute_query(user_data, executor_id):
+    """
+    Executa a query salva em um executor para múltiplas conexões, com suporte a parâmetros e paginação.
+    """
+    try:
+        # Validar os parâmetros
+        errors = validate_executor_parameters(executor_id)
+        if errors:
+            return jsonify({
+                "status": "error",
+                "message": "Erro de validação nos parâmetros.",
+                "errors": errors
+            }), 400
+
+        # Obter parâmetros de paginação da URL
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 1000))
+        offset = (page - 1) * limit
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Buscar informações do executor
+        cursor.execute("SELECT * FROM executors WHERE id = %s", (executor_id,))
+        executor = cursor.fetchone()
+
+        if not executor:
+            return jsonify({"status": "error", "message": "Executor não encontrado."}), 404
+
+        connection_ids = executor["connection_ids"].split(",")
+        file_path = executor["file_path"]
+
+        # Ler a query do arquivo
+        with open(file_path, "r", encoding="utf-8") as file:
+            query = file.read().rstrip(";")  # Remove qualquer ";" no final
+
+        # Buscar e substituir parâmetros na query
+        parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
+        cursor.execute(parameter_query, (executor_id,))
+        parameters = cursor.fetchall()
+
+        for param in parameters:
+            param_placeholder = f"@{param['name']}"
+            param_value = param["value"]
+            if param["type"].lower() in ["string", "date"]:
+                param_value = f"'{param_value}'"
+            query = query.replace(param_placeholder, str(param_value))
+
+        # Adicionar limites de paginação à query
+        paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
+        paginated_query_oracle = f"""
+        SELECT * FROM (
+            SELECT a.*, ROWNUM rnum FROM ({query}) a
+            WHERE ROWNUM <= {offset + limit}
+        )
+        WHERE rnum > {offset}
+        """
+
+        results = {}
+        for connection_id in connection_ids:
+            cursor.execute("SELECT * FROM connections WHERE id = %s", (connection_id,))
+            connection_data = cursor.fetchone()
+
+            if not connection_data:
+                results[f"connection_{connection_id}"] = "Conexão não encontrada."
+                continue
+
+            # Abrir a conexão com o banco
+            db_type = connection_data["db_type"]
+            host = connection_data["host"]
+            port = connection_data["port"]
+            user = connection_data["username"]
+            encrypted_password = connection_data["password"]
+            database_name = connection_data["database_name"]
+            service_name = connection_data.get("service_name", None)
+            sid = connection_data.get("sid", None)
+
+            try:
+                # Descriptografar a senha
+                password = decrypt_password(encrypted_password)
+
+                if db_type == "mysql":
+                    db_conn = create_mysql_connection(host, port, user, password, database_name)
+                    final_query = paginated_query_mysql
+                elif db_type == "oracle":
+                    db_conn = create_oracle_connection(
+                        host=host, port=port, user=user, password=password,
+                        service_name=service_name, sid=sid
+                    )
+                    final_query = paginated_query_oracle
+                else:
+                    results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."
+                    continue
+
+                db_cursor = db_conn.cursor()
+                db_cursor.execute(final_query)
+
+                columns = [col[0] for col in db_cursor.description]
+                rows = [dict(zip(columns, row)) for row in db_cursor.fetchall()]
+
+                results[f"connection_{connection_id}"] = rows
+
+                db_cursor.close()
+                db_conn.close()
+            except Exception as e:
+                results[f"connection_{connection_id}"] = str(e)
+
+        # Atualizar o campo executed_at
+        update_query = "UPDATE executors SET executed_at = %s WHERE id = %s"
+        cursor.execute(update_query, (datetime.now(), executor_id))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "data": results}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
