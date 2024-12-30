@@ -499,6 +499,7 @@ def execute_query(user_data, executor_id):
         executor = cursor.fetchone()
 
         if not executor:
+            print("Executor não encontrado.")
             return jsonify({"status": "error", "message": "Executor não encontrado."}), 404
 
         connection_ids = executor["connection_ids"].split(",")
@@ -507,18 +508,21 @@ def execute_query(user_data, executor_id):
         # Ler a query do arquivo
         with open(file_path, "r", encoding="utf-8") as file:
             query = file.read().rstrip(";")  # Remove qualquer ";" no final
+        print(f"Query original carregada: {query}")
 
         # Buscar e substituir parâmetros na query
         parameter_query = "SELECT name, type, value FROM executor_parameters WHERE executor_id = %s"
         cursor.execute(parameter_query, (executor_id,))
         parameters = cursor.fetchall()
 
+        param_dict = {}
         for param in parameters:
-            param_placeholder = f"@{param['name']}"
+            param_placeholder = f":{param['name']}"
             param_value = param["value"]
-            if param["type"].lower() in ["string", "date"]:
-                param_value = f"'{param_value}'"
-            query = query.replace(param_placeholder, str(param_value))
+            param_dict[param_placeholder] = param_value
+            print(f"Substituindo placeholder {param_placeholder} com valor {param_value}.")
+
+        print("Parâmetros finais para a query:", param_dict)
 
         # Adicionar limites de paginação à query
         paginated_query_mysql = f"{query} LIMIT {limit} OFFSET {offset}"
@@ -529,6 +533,8 @@ def execute_query(user_data, executor_id):
         )
         WHERE rnum > {offset}
         """
+        print("Query paginada MySQL:", paginated_query_mysql)
+        print("Query paginada Oracle:", paginated_query_oracle)
 
         results = {}
         for connection_id in connection_ids:
@@ -566,8 +572,10 @@ def execute_query(user_data, executor_id):
                     results[f"connection_{connection_id}"] = "Tipo de banco desconhecido."
                     continue
 
+                print(f"Executando a query na conexão {connection_id} (tipo: {db_type}) com os parâmetros:", param_dict)
+
                 db_cursor = db_conn.cursor()
-                db_cursor.execute(final_query)
+                db_cursor.execute(final_query, param_dict)
 
                 columns = [col[0] for col in db_cursor.description]
                 rows = [dict(zip(columns, row)) for row in db_cursor.fetchall()]
@@ -577,6 +585,7 @@ def execute_query(user_data, executor_id):
                 db_cursor.close()
                 db_conn.close()
             except Exception as e:
+                print(f"Erro ao executar a query na conexão {connection_id}:", e)
                 results[f"connection_{connection_id}"] = str(e)
 
         # Atualizar o campo executed_at
@@ -587,6 +596,8 @@ def execute_query(user_data, executor_id):
         cursor.close()
         conn.close()
 
+        print("Resultados finais da execução:", results)
         return jsonify({"status": "success", "data": results}), 200
     except Exception as e:
+        print("Erro durante a execução da query:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
