@@ -540,7 +540,11 @@ def execute_query(user_data, executor_id):
     """
     try:
         # Obter parâmetros enviados pelo usuário
-        request_data = request.json or {}
+        if request.is_json:
+            request_data = request.get_json()
+        else:
+            request_data = {}
+
         user_parameters = request_data.get("parameters", {})
 
         # Validar os parâmetros
@@ -658,7 +662,6 @@ def execute_query(user_data, executor_id):
     except Exception as e:
         print("Erro durante a execução da query:", e)
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 def validate_executor_parameters_with_user_input(executor_id, user_parameters):
     """
