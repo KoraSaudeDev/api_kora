@@ -1,8 +1,7 @@
 import bcrypt
 from app.config.db_config import create_mysql_connection
-import jwt
-from app.utils.helpers import create_token
 import logging
+from app.utils.helpers import create_token
 
 class AuthService:
     @staticmethod
@@ -29,21 +28,39 @@ class AuthService:
                 return {"status": "error", "message": "Senha incorreta", "status_code": 401}
 
             # Buscar todas as rotas de acesso para o usuário
+            access_slugs = []
+            access_prefixes = []
+
             if user.get('is_admin', 0) == 1:
                 # Se for administrador, busca todas as rotas
-                query_access_all = "SELECT route_prefix FROM access"
-                cursor.execute(query_access_all)
-                access = [row['route_prefix'] for row in cursor.fetchall()]
+                query_access_all_slugs = "SELECT route_slug FROM access_routes WHERE route_slug IS NOT NULL"
+                query_access_all_prefixes = "SELECT route_prefix FROM access_routes WHERE route_prefix IS NOT NULL"
+
+                cursor.execute(query_access_all_slugs)
+                access_slugs = [row['route_slug'] for row in cursor.fetchall()]
+
+                cursor.execute(query_access_all_prefixes)
+                access_prefixes = [row['route_prefix'] for row in cursor.fetchall()]
             else:
                 # Caso contrário, busca somente as rotas permitidas no `access` (com associação ao usuário)
-                query_user_access = """
-                    SELECT a.route_prefix 
+                query_user_access_slugs = """
+                    SELECT ar.route_slug
                     FROM user_access ua
-                    JOIN access a ON ua.access_id = a.id
-                    WHERE ua.user_id = %s
+                    JOIN access_routes ar ON ua.access_id = ar.access_id
+                    WHERE ua.user_id = %s AND ar.route_slug IS NOT NULL
                 """
-                cursor.execute(query_user_access, (user['id'],))
-                access = [row['route_prefix'] for row in cursor.fetchall()]
+                query_user_access_prefixes = """
+                    SELECT ar.route_prefix
+                    FROM user_access ua
+                    JOIN access_routes ar ON ua.access_id = ar.access_id
+                    WHERE ua.user_id = %s AND ar.route_prefix IS NOT NULL
+                """
+
+                cursor.execute(query_user_access_slugs, (user['id'],))
+                access_slugs = [row['route_slug'] for row in cursor.fetchall()]
+
+                cursor.execute(query_user_access_prefixes, (user['id'],))
+                access_prefixes = [row['route_prefix'] for row in cursor.fetchall()]
 
             cursor.close()
             connection.close()
@@ -59,14 +76,16 @@ class AuthService:
             return {
                 "status": "success",
                 "token": token,
-                "access": access
+                "access": {
+                    "slugs": access_slugs,
+                    "prefixes": access_prefixes
+                }
             }
 
         except Exception as e:
             logging.error(f"Erro no AuthService: {e}")
             return {"status": "error", "message": str(e), "status_code": 500}
-   
-class AuthService:
+
     @staticmethod
     def get_user_data(username):
         try:
@@ -82,25 +101,42 @@ class AuthService:
                 return None
 
             # Buscar as rotas do usuário
-            query_access_all = "SELECT route_prefix FROM access"
-            query_user_access = """
-                SELECT r.route_prefix
-                FROM user_access ur
-                JOIN access r ON ur.route_id = r.id
-                WHERE ur.user_id = %s
-            """
+            access_slugs = []
+            access_prefixes = []
 
             if user_data.get('is_admin', 0) == 1:
                 # Se for administrador, busca todas as rotas
-                cursor.execute(query_access_all)
-                user_data['access'] = [row['route_prefix'] for row in cursor.fetchall()]
+                cursor.execute("SELECT route_slug FROM access_routes WHERE route_slug IS NOT NULL")
+                access_slugs = [row['route_slug'] for row in cursor.fetchall()]
+
+                cursor.execute("SELECT route_prefix FROM access_routes WHERE route_prefix IS NOT NULL")
+                access_prefixes = [row['route_prefix'] for row in cursor.fetchall()]
             else:
                 # Caso contrário, busca somente as rotas permitidas
-                cursor.execute(query_user_access, (user_data['id'],))
-                user_data['access'] = [row['route_prefix'] for row in cursor.fetchall()]
+                cursor.execute("""
+                    SELECT route_slug
+                    FROM user_access ua
+                    JOIN access_routes ar ON ua.access_id = ar.access_id
+                    WHERE ua.user_id = %s AND ar.route_slug IS NOT NULL
+                """, (user_data['id'],))
+                access_slugs = [row['route_slug'] for row in cursor.fetchall()]
+
+                cursor.execute("""
+                    SELECT route_prefix
+                    FROM user_access ua
+                    JOIN access_routes ar ON ua.access_id = ar.access_id
+                    WHERE ua.user_id = %s AND ar.route_prefix IS NOT NULL
+                """, (user_data['id'],))
+                access_prefixes = [row['route_prefix'] for row in cursor.fetchall()]
 
             cursor.close()
             connection.close()
+
+            user_data['access'] = {
+                "slugs": access_slugs,
+                "prefixes": access_prefixes
+            }
+
             return user_data
 
         except Exception as e:

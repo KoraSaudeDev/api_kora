@@ -2,6 +2,7 @@ import os
 from flask import Blueprint, request, jsonify
 from app.config.db_config import create_db_connection_mysql
 import logging
+from slugify import slugify 
 
 # Blueprint para acessos
 access_bp = Blueprint('access', __name__, url_prefix='/access')
@@ -24,26 +25,30 @@ def create_access():
                 "message": "O campo 'name' e pelo menos uma rota (slug ou prefix) são obrigatórios."
             }), 400
 
+        # Gerar o slug a partir do nome
+        slug = slugify(name)
+        logging.info(f"Slug gerado para '{name}': {slug}")
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
         
         # Inserir o novo access
-        query_insert_access = "INSERT INTO access (name) VALUES (%s)"
-        cursor.execute(query_insert_access, (name,))
+        query_insert_access = "INSERT INTO access (name, slug) VALUES (%s, %s)"
+        cursor.execute(query_insert_access, (name, slug))
         access_id = cursor.lastrowid
         logging.info(f"Access criado com ID: {access_id}")
 
         # Associar rotas dinâmicas (slugs)
         query_insert_slug_access = "INSERT INTO access_routes (access_id, route_slug) VALUES (%s, %s)"
-        for slug in route_slugs:
-            cursor.execute(query_insert_slug_access, (access_id, slug))
-            logging.info(f"Associado slug '{slug}' ao access {access_id}")
+        for route_slug in route_slugs:
+            cursor.execute(query_insert_slug_access, (access_id, route_slug))
+            logging.info(f"Associado slug '{route_slug}' ao access {access_id}")
 
         # Associar rotas fixas (prefixos)
         query_insert_prefix_access = "INSERT INTO access_routes (access_id, route_prefix) VALUES (%s, %s)"
-        for prefix in route_prefixes:
-            cursor.execute(query_insert_prefix_access, (access_id, prefix))
-            logging.info(f"Associado prefix '{prefix}' ao access {access_id}")
+        for route_prefix in route_prefixes:
+            cursor.execute(query_insert_prefix_access, (access_id, route_prefix))
+            logging.info(f"Associado prefix '{route_prefix}' ao access {access_id}")
 
         conn.commit()
         cursor.close()
