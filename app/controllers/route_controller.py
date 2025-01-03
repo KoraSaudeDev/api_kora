@@ -30,7 +30,6 @@ def generate_slug(name):
 
 @route_bp.route('/create', methods=['POST'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def create_route(user_data):
     """
@@ -125,7 +124,6 @@ def create_route(user_data):
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def list_routes(user_data):
     """
@@ -185,7 +183,6 @@ def list_routes(user_data):
 
 @route_bp.route('/connections', methods=['POST'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def update_route_connections(user_data):
     """
@@ -227,7 +224,6 @@ def update_route_connections(user_data):
 
 @route_bp.route('/<int:route_id>/connections', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def list_route_connections(user_data, route_id):
     """
@@ -255,7 +251,6 @@ def list_route_connections(user_data, route_id):
       
 @route_bp.route('/edit/<int:route_id>', methods=['PUT'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
@@ -345,7 +340,6 @@ def edit_route(user_data, route_id):
  
 @route_bp.route('/profile/<int:route_id>', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def get_route_details(user_data, route_id):
     """
@@ -418,7 +412,6 @@ def get_route_details(user_data, route_id):
 
 @route_bp.route('/execute/<slug>', methods=['POST'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/routes')
 def execute_route_query(user_data, slug):
     """

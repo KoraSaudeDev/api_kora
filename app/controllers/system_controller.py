@@ -12,7 +12,6 @@ BASE_QUERIES_PATH = os.path.join("app", "queries")
 
 @system_bp.route('/create', methods=['POST'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/systems')
 def create_system(user_data):
     """
@@ -54,7 +53,6 @@ def create_system(user_data):
 
 @system_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/systems')
 def list_systems(user_data):
     """
@@ -147,7 +145,6 @@ def list_systems(user_data):
       
 @system_bp.route('/profile/<int:id>', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/systems')
 def get_system_profile(user_data, id):
     """

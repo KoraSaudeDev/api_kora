@@ -119,7 +119,6 @@ def get_expected_params(db_type):
 
 @connection_bp.route("/expected_params/<db_type>", methods=["GET"])
 @token_required
-@admin_required
 def get_expected_params_endpoint(user_data, db_type):
     """
     Retorna os parâmetros esperados para o tipo de banco de dados especificado.
