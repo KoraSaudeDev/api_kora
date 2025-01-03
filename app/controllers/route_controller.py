@@ -373,7 +373,7 @@ def edit_route(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def get_route_details(user_data, route_id):
     """
-    Retorna os detalhes de uma rota específica com base no ID fornecido.
+    Retorna os detalhes de uma rota específica com base no ID fornecido, incluindo parâmetros e conexões vinculadas.
     ---
     tags:
       - Routes
@@ -399,16 +399,52 @@ def get_route_details(user_data, route_id):
                 id:
                   type: integer
                   example: 1
-                route_prefix:
+                name:
                   type: string
-                  example: "/dashboard"
+                  example: "Minha Rota"
+                slug:
+                  type: string
+                  example: "minha_rota"
+                query:
+                  type: string
+                  example: "SELECT * FROM tabela"
                 description:
                   type: string
-                  example: "Acesso ao dashboard principal"
-      404:
-        description: Rota não encontrada.
-      500:
-        description: Erro interno no servidor.
+                  example: "Descrição da rota"
+                parameters:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        example: "param1"
+                      type:
+                        type: string
+                        example: "string"
+                      value:
+                        type: string
+                        example: "valor"
+                connections:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        example: 1
+                      name:
+                        type: string
+                        example: "Conexão MySQL"
+                      db_type:
+                        type: string
+                        example: "mysql"
+                      host:
+                        type: string
+                        example: "127.0.0.1"
+                      port:
+                        type: integer
+                        example: 3306
     """
     try:
         conn = create_db_connection_mysql()
@@ -428,10 +464,32 @@ def get_route_details(user_data, route_id):
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
+        # Buscar os parâmetros da rota
+        query_parameters = """
+            SELECT name, type, value
+            FROM route_parameters
+            WHERE route_id = %s
+        """
+        cursor.execute(query_parameters, (route_id,))
+        parameters = cursor.fetchall()
+
+        # Buscar as conexões associadas à rota
+        query_connections = """
+            SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.database_name
+            FROM connections c
+            JOIN route_connections rc ON c.id = rc.connection_id
+            WHERE rc.route_id = %s
+        """
+        cursor.execute(query_connections, (route_id,))
+        connections = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
-        # Retornar os detalhes da rota
+        # Retornar os detalhes da rota com parâmetros e conexões
+        route["parameters"] = parameters
+        route["connections"] = connections
+
         return jsonify({
             "status": "success",
             "route": route
