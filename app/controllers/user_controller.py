@@ -94,6 +94,9 @@ def create_user(user_data):
 @admin_required
 @permission_required(route_prefix='/users')
 def edit_user(user_data, user_id):
+    """
+    Edita as informações de um usuário, incluindo rotas associadas caso seja promovido a admin.
+    """
     try:
         data = request.json
         updates = []
@@ -142,9 +145,9 @@ def edit_user(user_data, user_id):
                 cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = %s", tuple(params))
                 conn.commit()
 
-                # Se o usuário foi promovido a admin, remover suas rotas
+                # Se o usuário foi promovido a admin, remover associações de access
                 if promote_to_admin:
-                    cursor.execute("DELETE FROM user_routes WHERE user_id = %s", (user_id,))
+                    cursor.execute("DELETE FROM user_access WHERE user_id = %s", (user_id,))
                     conn.commit()
 
         # Retornar o ID do usuário atualizado
@@ -159,11 +162,11 @@ def edit_user(user_data, user_id):
 @permission_required(route_prefix='/users')
 def delete_user(user_data, user_id):
     """
-    Realiza o soft delete de um usuário e remove os vínculos com as rotas.
+    Realiza o soft delete de um usuário e remove os vínculos com os acessos.
     """
     try:
         conn = create_db_connection_mysql()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         # Verificar se o usuário existe
         cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
@@ -175,9 +178,9 @@ def delete_user(user_data, user_id):
         query_soft_delete = "UPDATE users SET is_active = FALSE WHERE id = %s"
         cursor.execute(query_soft_delete, (user_id,))
 
-        # Remover vínculos com as rotas
-        query_remove_routes = "DELETE FROM user_routes WHERE user_id = %s"
-        cursor.execute(query_remove_routes, (user_id,))
+        # Remover vínculos com os acessos
+        query_remove_access = "DELETE FROM user_access WHERE user_id = %s"
+        cursor.execute(query_remove_access, (user_id,))
 
         conn.commit()
 
@@ -286,10 +289,12 @@ def list_users_with_routes(user_data):
                 u.username, 
                 u.is_admin,
                 u.is_active,
-                GROUP_CONCAT(r.route_prefix) AS routes
+                GROUP_CONCAT(DISTINCT ar.route_slug) AS route_slugs,
+                GROUP_CONCAT(DISTINCT ar.route_prefix) AS route_prefixes
             FROM users u
-            LEFT JOIN user_routes ur ON u.id = ur.user_id
-            LEFT JOIN routes r ON ur.route_id = r.id
+            LEFT JOIN user_access ua ON u.id = ua.user_id
+            LEFT JOIN access a ON ua.access_id = a.id
+            LEFT JOIN access_routes ar ON a.id = ar.access_id
             GROUP BY u.id
             ORDER BY u.username
             LIMIT {limit} OFFSET {offset}
@@ -310,7 +315,10 @@ def list_users_with_routes(user_data):
                 "username": user["username"],
                 "is_admin": bool(user["is_admin"]),
                 "is_active": bool(user["is_active"]),
-                "routes": user["routes"].split(",") if user["routes"] else []
+                "routes": {
+                    "slugs": user["route_slugs"].split(",") if user["route_slugs"] else [],
+                    "prefixes": user["route_prefixes"].split(",") if user["route_prefixes"] else []
+                }
             })
 
         cursor.close()
