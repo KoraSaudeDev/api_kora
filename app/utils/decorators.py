@@ -39,9 +39,9 @@ def admin_required(f):
         return f(user_data=user_data, *args, **kwargs)
     return decorator
 
-def permission_required(route_prefix):
+def permission_required(route_prefix=None, slug=None):
     """
-    Decorator para verificar permissões do usuário com base no prefixo da rota.
+    Verifica se o usuário tem permissão para acessar a rota ou slug.
     """
     def decorator(f):
         @wraps(f)
@@ -58,16 +58,17 @@ def permission_required(route_prefix):
 
             try:
                 conn = create_db_connection_mysql()
-                cursor = conn.cursor()
+                cursor = conn.cursor(dictionary=True)
 
-                # Verifica se o usuário tem permissão para acessar a rota
+                # Verificar se o usuário tem acesso ao slug ou ao prefixo
                 query = """
-                    SELECT r.route_prefix
-                    FROM routes r
-                    INNER JOIN user_routes ur ON r.id = ur.route_id
-                    WHERE ur.user_id = %s AND r.route_prefix = %s
+                    SELECT 1
+                    FROM user_access ua
+                    JOIN access_routes ar ON ua.access_id = ar.access_id
+                    WHERE ua.user_id = %s
+                    AND (ar.route_slug = %s OR ar.route_prefix = %s)
                 """
-                cursor.execute(query, (user_id, route_prefix))
+                cursor.execute(query, (user_id, slug, route_prefix))
                 result = cursor.fetchone()
 
                 cursor.close()

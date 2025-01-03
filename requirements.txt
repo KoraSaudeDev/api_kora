@@ -3,8 +3,39 @@ Flasgger==0.9.5
 mysql-connector-python==8.2.0
 cx_Oracle==8.3.0
 bcrypt==4.0.1
-cryptography==41.0.3
+cryptography==40.0.2
 python-dotenv==1.0.0
 PyJWT==2.8.0
 werkzeug==2.2.3
 flask-cors==4.0.0
+unidecode
+
+# Pacotes adicionais necessários para diferentes bancos de dados
+sqlalchemy==2.0.21
+pymysql==1.0.3  # Para conexões MySQL/MariaDB
+psycopg2-binary==2.9.7  # Para conexões PostgreSQL
+pyodbc==4.0.35  # Para conexões ODBC (e.g., SQL Server, SAP)
+hdbcli==2.23.24  # Para conexões SAP HANA
+ibm_db==3.1.4  # Para conexões IBM Db2
+pymongo==4.5.0  # Para conexões MongoDB
+redis==5.0.0  # Para conexões Redis
+cassandra-driver==3.25.0  # Para conexões Cassandra
+snowflake-connector-python==3.0.0
+firebase-admin==6.0.1  # Para conexões Firebase
+elasticsearch==8.9.0  # Para conexões Elasticsearch
+boto3==1.28.45  # Para conexões DynamoDB (AWS)
+
+# Bancos de dados relacionais
+mysql-connector-python==8.2.0
+cx_Oracle==8.3.0
+psycopg2-binary==2.9.7  # Para PostgreSQL
+pyodbc==4.0.35  # Para ODBC (e.g., SQL Server, SAP)
+
+# Bancos de dados NoSQL
+pymongo==4.5.0  # MongoDB
+redis==5.0.0  # Redis
+cassandra-driver==3.25.0  # Cassandra
+
+# Outras dependências
+sqlalchemy==2.0.21
+hdbcli==2.23.24  # SAP HANA

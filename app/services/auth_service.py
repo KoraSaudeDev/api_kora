@@ -28,23 +28,22 @@ class AuthService:
                 connection.close()
                 return {"status": "error", "message": "Senha incorreta", "status_code": 401}
 
-            # Buscar as rotas do usuário
-            query_routes_all = "SELECT route_prefix FROM routes"
-            query_user_routes = """
-                SELECT r.route_prefix 
-                FROM user_routes ur
-                JOIN routes r ON ur.route_id = r.id
-                WHERE ur.user_id = %s
-            """
-
+            # Buscar todas as rotas de acesso para o usuário
             if user.get('is_admin', 0) == 1:
                 # Se for administrador, busca todas as rotas
-                cursor.execute(query_routes_all)
-                routes = [row['route_prefix'] for row in cursor.fetchall()]
+                query_access_all = "SELECT route_prefix FROM access"
+                cursor.execute(query_access_all)
+                access = [row['route_prefix'] for row in cursor.fetchall()]
             else:
-                # Caso contrário, busca somente as rotas permitidas
-                cursor.execute(query_user_routes, (user['id'],))
-                routes = [row['route_prefix'] for row in cursor.fetchall()]
+                # Caso contrário, busca somente as rotas permitidas no `access` (com associação ao usuário)
+                query_user_access = """
+                    SELECT a.route_prefix 
+                    FROM user_access ua
+                    JOIN access a ON ua.access_id = a.id
+                    WHERE ua.user_id = %s
+                """
+                cursor.execute(query_user_access, (user['id'],))
+                access = [row['route_prefix'] for row in cursor.fetchall()]
 
             cursor.close()
             connection.close()
@@ -60,13 +59,13 @@ class AuthService:
             return {
                 "status": "success",
                 "token": token,
-                "routes": routes
+                "access": access
             }
 
         except Exception as e:
             logging.error(f"Erro no AuthService: {e}")
             return {"status": "error", "message": str(e), "status_code": 500}
-        
+   
 class AuthService:
     @staticmethod
     def get_user_data(username):
@@ -83,22 +82,22 @@ class AuthService:
                 return None
 
             # Buscar as rotas do usuário
-            query_routes_all = "SELECT route_prefix FROM routes"
-            query_user_routes = """
+            query_access_all = "SELECT route_prefix FROM access"
+            query_user_access = """
                 SELECT r.route_prefix
-                FROM user_routes ur
-                JOIN routes r ON ur.route_id = r.id
+                FROM user_access ur
+                JOIN access r ON ur.route_id = r.id
                 WHERE ur.user_id = %s
             """
 
             if user_data.get('is_admin', 0) == 1:
                 # Se for administrador, busca todas as rotas
-                cursor.execute(query_routes_all)
-                user_data['routes'] = [row['route_prefix'] for row in cursor.fetchall()]
+                cursor.execute(query_access_all)
+                user_data['access'] = [row['route_prefix'] for row in cursor.fetchall()]
             else:
                 # Caso contrário, busca somente as rotas permitidas
-                cursor.execute(query_user_routes, (user_data['id'],))
-                user_data['routes'] = [row['route_prefix'] for row in cursor.fetchall()]
+                cursor.execute(query_user_access, (user_data['id'],))
+                user_data['access'] = [row['route_prefix'] for row in cursor.fetchall()]
 
             cursor.close()
             connection.close()
