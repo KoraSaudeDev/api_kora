@@ -219,200 +219,6 @@ def restore_user(user_data, user_id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@user_bp.route('/routes/assign', methods=['POST'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/users')
-def assign_routes(user_data):
-    """
-    Associa rotas a um usuário.
-    ---
-    tags:
-      - Users
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - user_id
-            - route_ids
-          properties:
-            user_id:
-              type: integer
-              example: 1
-            route_ids:
-              type: array
-              items:
-                type: integer
-              example: [1, 2, 3]
-    responses:
-      201:
-        description: Rotas associadas com sucesso.
-      400:
-        description: Campos obrigatórios ausentes ou inválidos.
-      500:
-        description: Erro interno no servidor.
-    """
-    try:
-        data = request.json
-        user_id = data.get("user_id")
-        route_ids = data.get("route_ids")
-
-        if not user_id or not route_ids:
-            return jsonify({"status": "error", "message": "Campos 'user_id' e 'route_ids' são obrigatórios."}), 400
-
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor()
-
-        for route_id in route_ids:
-            try:
-                query = """
-                    INSERT INTO user_routes (user_id, route_id)
-                    VALUES (%s, %s)
-                """
-                cursor.execute(query, (user_id, route_id))
-            except Exception as e:
-                if "Duplicate entry" in str(e):
-                    continue  # Ignora duplicatas
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "message": "Rotas associadas com sucesso."}), 201
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@user_bp.route('/routes/remove', methods=['DELETE'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/users')
-def remove_routes(user_data):
-    """
-    Remove todas as rotas de um usuário.
-    ---
-    tags:
-      - Users
-    parameters:
-      - name: user_id
-        in: query
-        required: true
-        type: integer
-        description: ID do usuário cujas rotas serão removidas.
-        example: 1
-    responses:
-      200:
-        description: Todas as rotas removidas com sucesso.
-      400:
-        description: Campo 'user_id' ausente.
-      500:
-        description: Erro interno no servidor.
-    """
-    try:
-        # Obter o ID do usuário da query string
-        user_id = request.args.get("user_id", type=int)
-
-        if not user_id:
-            return jsonify({"status": "error", "message": "Campo 'user_id' é obrigatório."}), 400
-
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor()
-
-        # Remover todos os vínculos de rotas para o usuário
-        query = "DELETE FROM user_routes WHERE user_id = %s"
-        cursor.execute(query, (user_id,))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "message": f"Todas as rotas foram removidas para o usuário com ID {user_id}."}), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@user_bp.route('/routes/update', methods=['PUT'])
-@token_required
-@admin_required
-@permission_required(route_prefix='/users')
-def update_routes(user_data):
-    """
-    Atualiza as rotas de um usuário, removendo as rotas existentes e associando as novas fornecidas.
-    ---
-    tags:
-      - Users
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          required:
-            - user_id
-            - route_ids
-          properties:
-            user_id:
-              type: integer
-              example: 1
-            route_ids:
-              type: array
-              items:
-                type: integer
-              example: [3, 4]
-    responses:
-      200:
-        description: Rotas atualizadas com sucesso.
-      400:
-        description: Campos obrigatórios ausentes ou inválidos.
-      500:
-        description: Erro interno no servidor.
-    """
-    try:
-        data = request.json
-        user_id = data.get("user_id")
-        route_ids = data.get("route_ids")
-
-        if not user_id or not isinstance(route_ids, list):
-            return jsonify({"status": "error", "message": "Campos 'user_id' e 'route_ids' são obrigatórios."}), 400
-
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        # Verificar se as rotas fornecidas existem na tabela `routes`
-        query_existing_routes = "SELECT id FROM routes WHERE id IN (%s)" % ",".join(["%s"] * len(route_ids))
-        cursor.execute(query_existing_routes, tuple(route_ids))
-        valid_route_ids = {row["id"] for row in cursor.fetchall()}
-
-        # Identificar rotas inválidas
-        invalid_route_ids = set(route_ids) - valid_route_ids
-        if invalid_route_ids:
-            return jsonify({
-                "status": "error",
-                "message": f"As seguintes rotas não existem: {list(invalid_route_ids)}"
-            }), 400
-
-        # Remover todas as rotas existentes associadas ao usuário
-        query_delete_existing_routes = "DELETE FROM user_routes WHERE user_id = %s"
-        cursor.execute(query_delete_existing_routes, (user_id,))
-
-        # Inserir as novas rotas associadas ao usuário
-        for route_id in valid_route_ids:
-            query_insert_route = "INSERT INTO user_routes (user_id, route_id) VALUES (%s, %s)"
-            cursor.execute(query_insert_route, (user_id, route_id))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        return jsonify({
-            "status": "success",
-            "message": "Rotas atualizadas com sucesso.",
-            "added_routes": list(valid_route_ids),
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
 @user_bp.route('/list', methods=['GET'])
 @token_required
 @admin_required
@@ -527,43 +333,7 @@ def list_users_with_routes(user_data):
 @permission_required(route_prefix='/users')
 def get_user_profile(user_data):
     """
-    Retorna os dados do usuário ativo e suas rotas associadas.
-    ---
-    tags:
-      - Users
-    responses:
-      200:
-        description: Dados do usuário ativo.
-        schema:
-          type: object
-          properties:
-            id:
-              type: integer
-              example: 1
-            username:
-              type: string
-              example: "john_doe"
-            is_admin:
-              type: boolean
-              example: true
-            routes:
-              type: array
-              items:
-                type: string
-              example: ["/home", "/settings", "/dashboard"]
-      404:
-        description: Usuário não encontrado.
-        schema:
-          type: object
-          properties:
-            status:
-              type: string
-              example: "error"
-            message:
-              type: string
-              example: "Usuário não encontrado."
-      500:
-        description: Erro interno no servidor.
+    Retorna os dados do usuário ativo e suas permissões (rotas e acessos).
     """
     try:
         user_id = user_data['id']  # Obtém o ID do usuário ativo a partir do token
@@ -573,9 +343,9 @@ def get_user_profile(user_data):
 
         # Obter informações do usuário ativo
         user_query = """
-            SELECT id, username, is_admin
+            SELECT id, username, is_admin, is_active
             FROM users
-            WHERE id = %s AND is_active = 1
+            WHERE id = %s
         """
         cursor.execute(user_query, (user_id,))
         user = cursor.fetchone()
@@ -585,84 +355,69 @@ def get_user_profile(user_data):
             conn.close()
             return jsonify({"status": "error", "message": "Usuário não encontrado."}), 404
 
-        # Obter as rotas associadas ao usuário
-        routes_query = """
-            SELECT r.route_prefix
-            FROM routes r
-            JOIN user_routes ur ON r.id = ur.route_id
-            WHERE ur.user_id = %s
+        # Obter acessos associados ao usuário
+        access_query = """
+            SELECT a.id AS access_id, a.name AS access_name,
+                   GROUP_CONCAT(DISTINCT ar.route_slug) AS route_slugs,
+                   GROUP_CONCAT(DISTINCT ar.route_prefix) AS route_prefixes
+            FROM user_access ua
+            JOIN access a ON ua.access_id = a.id
+            LEFT JOIN access_routes ar ON ar.access_id = a.id
+            WHERE ua.user_id = %s
+            GROUP BY a.id
         """
-        cursor.execute(routes_query, (user_id,))
-        routes = [row['route_prefix'] for row in cursor.fetchall()]
+        cursor.execute(access_query, (user_id,))
+        accesses = cursor.fetchall()
+
+        # Organizar rotas em uma única lista
+        routes = {
+            "slugs": [],
+            "prefixes": []
+        }
+        for access in accesses:
+            if access["route_slugs"]:
+                routes["slugs"].extend(access["route_slugs"].split(","))
+            if access["route_prefixes"]:
+                routes["prefixes"].extend(access["route_prefixes"].split(","))
 
         cursor.close()
         conn.close()
 
-        # Retornar os dados do usuário com as rotas associadas
+        # Retornar os dados do usuário com os acessos e permissões
         return jsonify({
             "status": "success",
             "user": {
                 "id": user["id"],
                 "username": user["username"],
                 "is_admin": bool(user["is_admin"]),
+                "is_active": bool(user["is_active"]),
+                "accesses": accesses,
                 "routes": routes
             }
         }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-         
+
+
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
 @admin_required
 @permission_required(route_prefix='/users')
 def get_user_profile_by_id(user_data, user_id):
     """
-    Retorna o perfil de um usuário específico com base no ID fornecido, incluindo as rotas associadas.
-    ---
-    tags:
-      - Users
-    parameters:
-      - name: user_id
-        in: path
-        required: true
-        type: integer
-        description: ID do usuário a ser buscado.
-        example: 1
-    responses:
-      200:
-        description: Perfil do usuário encontrado.
-        schema:
-          type: object
-          properties:
-            id:
-              type: integer
-              example: 1
-            username:
-              type: string
-              example: "john_doe"
-            is_admin:
-              type: boolean
-              example: true
-            is_active:
-              type: boolean
-              example: true
-            routes:
-              type: array
-              items:
-                type: integer
-              example: [1, 2, 3]
-      404:
-        description: Usuário não encontrado.
-      500:
-        description: Erro interno no servidor.
+    Retorna o perfil de um usuário específico, incluindo seus acessos e permissões.
     """
     try:
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
         # Buscar dados do usuário
-        query_user = "SELECT id, username, is_admin, is_active FROM users WHERE id = %s"
+        query_user = """
+            SELECT id, username, is_admin, is_active
+            FROM users
+            WHERE id = %s
+        """
         cursor.execute(query_user, (user_id,))
         user = cursor.fetchone()
 
@@ -671,19 +426,34 @@ def get_user_profile_by_id(user_data, user_id):
             conn.close()
             return jsonify({"status": "error", "message": "Usuário não encontrado."}), 404
 
-        # Buscar IDs das rotas associadas ao usuário
-        query_routes = """
-            SELECT ur.route_id
-            FROM user_routes ur
-            WHERE ur.user_id = %s
+        # Obter acessos associados ao usuário
+        access_query = """
+            SELECT a.id AS access_id, a.name AS access_name,
+                   GROUP_CONCAT(DISTINCT ar.route_slug) AS route_slugs,
+                   GROUP_CONCAT(DISTINCT ar.route_prefix) AS route_prefixes
+            FROM user_access ua
+            JOIN access a ON ua.access_id = a.id
+            LEFT JOIN access_routes ar ON ar.access_id = a.id
+            WHERE ua.user_id = %s
+            GROUP BY a.id
         """
-        cursor.execute(query_routes, (user_id,))
-        routes = [row["route_id"] for row in cursor.fetchall()]
+        cursor.execute(access_query, (user_id,))
+        accesses = cursor.fetchall()
+
+        # Organizar rotas em uma única lista
+        routes = {
+            "slugs": [],
+            "prefixes": []
+        }
+        for access in accesses:
+            if access["route_slugs"]:
+                routes["slugs"].extend(access["route_slugs"].split(","))
+            if access["route_prefixes"]:
+                routes["prefixes"].extend(access["route_prefixes"].split(","))
 
         cursor.close()
         conn.close()
 
-        # Montar a resposta
         return jsonify({
             "status": "success",
             "user": {
@@ -691,6 +461,7 @@ def get_user_profile_by_id(user_data, user_id):
                 "username": user["username"],
                 "is_admin": bool(user["is_admin"]),
                 "is_active": bool(user["is_active"]),
+                "accesses": accesses,
                 "routes": routes
             }
         }), 200

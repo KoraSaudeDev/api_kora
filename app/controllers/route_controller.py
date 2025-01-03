@@ -137,7 +137,7 @@ def list_routes(user_data):
 
         # Buscar rotas e associar systems e connections
         query_routes = """
-            SELECT r.id, r.name, r.slug, r.sql_query, r.created_at, r.updated_at
+            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at
             FROM routes r
             ORDER BY r.id
         """
@@ -161,7 +161,6 @@ def list_routes(user_data):
                 "id": route_id,
                 "name": route['name'],
                 "slug": route['slug'],
-                "sql_query": route['sql_query'],
                 "created_at": route['created_at'],
                 "updated_at": route['updated_at'],
                 "system_ids": [],
@@ -393,7 +392,7 @@ def get_route_details(user_data, route_id):
 
         # Buscar os detalhes da rota
         query_route = """
-            SELECT id, route_prefix, description
+            SELECT id, name, slug, query, description
             FROM routes
             WHERE id = %s
         """
