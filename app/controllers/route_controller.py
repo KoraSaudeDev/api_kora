@@ -455,9 +455,6 @@ def execute_route_query(user_data, slug):
         }
         provided_connections = request_data.get("connections", [])
 
-        if not provided_connections:
-            return jsonify({"status": "error", "message": "Conexões não foram fornecidas."}), 400
-
         # Conectar ao banco principal
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
@@ -474,7 +471,7 @@ def execute_route_query(user_data, slug):
         if not route:
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Buscar parâmetros da rota
+        # Buscar parâmetros da rota, caso não sejam fornecidos
         query_parameters = """
             SELECT name, type, value
             FROM route_parameters
@@ -483,18 +480,10 @@ def execute_route_query(user_data, slug):
         cursor.execute(query_parameters, (route['id'],))
         route_parameters = cursor.fetchall()
 
-        # Validar parâmetros fornecidos
-        missing_parameters = [
-            param['name'] for param in route_parameters
-            if param['name'] not in provided_parameters
-        ]
-
-        if missing_parameters:
-            return jsonify({
-                "status": "error",
-                "message": "Parâmetros ausentes.",
-                "missing_parameters": missing_parameters
-            }), 400
+        # Preencher parâmetros com valores padrão, caso não sejam fornecidos
+        for param in route_parameters:
+            if param['name'] not in provided_parameters:
+                provided_parameters[param['name']] = param['value']
 
         # Substituir parâmetros diretamente na query
         query = route['query']
@@ -503,18 +492,27 @@ def execute_route_query(user_data, slug):
             param_value = provided_parameters.get(param_name, param['value'])
             query = query.replace(f":{param_name}", f"'{param_value}'")
 
-        # Buscar conexões com base nos slugs fornecidos
-        query_connections = """
-            SELECT id, db_type, host, port, username, password, database_name, service_name, sid
-            FROM connections
-            WHERE slug IN (%s)
-        """ % ', '.join(['%s'] * len(provided_connections))
-
-        cursor.execute(query_connections, tuple(provided_connections))
-        connections = cursor.fetchall()
+        # Buscar conexões associadas, caso não sejam fornecidas
+        if not provided_connections:
+            query_connections = """
+                SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.password, c.database_name, c.service_name, c.sid
+                FROM connections c
+                JOIN route_connections rc ON c.id = rc.connection_id
+                WHERE rc.route_id = %s
+            """
+            cursor.execute(query_connections, (route['id'],))
+            connections = cursor.fetchall()
+        else:
+            query_connections = """
+                SELECT id, name, db_type, host, port, username, password, database_name, service_name, sid
+                FROM connections
+                WHERE slug IN (%s)
+            """ % ', '.join(['%s'] * len(provided_connections))
+            cursor.execute(query_connections, tuple(provided_connections))
+            connections = cursor.fetchall()
 
         if not connections:
-            return jsonify({"status": "error", "message": "Nenhuma conexão válida encontrada para os slugs fornecidos."}), 404
+            return jsonify({"status": "error", "message": "Nenhuma conexão válida encontrada."}), 404
 
         results = {}
         for connection in connections:
@@ -542,18 +540,18 @@ def execute_route_query(user_data, slug):
                     )
                     db_cursor = db_conn.cursor()
                 else:
-                    results[connection['id']] = "Tipo de banco desconhecido."
+                    results[connection['name']] = "Tipo de banco desconhecido."
                     continue
 
                 # Executar a query
                 db_cursor.execute(query)
                 rows = db_cursor.fetchall()
                 columns = [col[0] for col in db_cursor.description]
-                results[connection['id']] = [dict(zip(columns, row)) for row in rows]
+                results[connection['name']] = [dict(zip(columns, row)) for row in rows]
                 db_cursor.close()
 
             except Exception as e:
-                results[connection['id']] = str(e)
+                results[connection['name']] = str(e)
 
         cursor.close()
         conn.close()
