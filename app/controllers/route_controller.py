@@ -442,7 +442,7 @@ def get_route_details(user_data, route_id):
 
 @route_bp.route('/execute/<slug>', methods=['POST'])
 @token_required
-@permission_required(route_prefix='/routes')
+@permission_required(route_prefix='/routes/execute')
 def execute_route_query(user_data, slug):
     """
     Executa a query associada a uma rota com base no slug fornecido.

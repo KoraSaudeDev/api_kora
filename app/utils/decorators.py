@@ -39,9 +39,9 @@ def admin_required(f):
         return f(user_data=user_data, *args, **kwargs)
     return decorator
 
-def permission_required(route_prefix=None, slug=None):
+def permission_required(route_prefix):
     """
-    Verifica se o usuário tem permissão para acessar a rota ou slug.
+    Decorator para verificar permissões do usuário com base no prefixo da rota e, se necessário, no slug.
     """
     def decorator(f):
         @wraps(f)
@@ -60,23 +60,41 @@ def permission_required(route_prefix=None, slug=None):
                 conn = create_db_connection_mysql()
                 cursor = conn.cursor(dictionary=True)
 
-                # Verificar se o usuário tem acesso ao slug ou ao prefixo
-                query = """
+                # Verifica se o usuário tem acesso ao prefixo da rota
+                query_prefix_access = """
                     SELECT 1
                     FROM user_access ua
                     JOIN access_routes ar ON ua.access_id = ar.access_id
-                    WHERE ua.user_id = %s
-                    AND (ar.route_slug = %s OR ar.route_prefix = %s)
+                    WHERE ua.user_id = %s AND ar.route_prefix = %s
                 """
-                cursor.execute(query, (user_id, slug, route_prefix))
-                result = cursor.fetchone()
+                cursor.execute(query_prefix_access, (user_id, route_prefix))
+                has_prefix_access = cursor.fetchone()
+
+                # Verificação para slug específico
+                if route_prefix.startswith("/routes/execute") and "slug" in kwargs:
+                    slug = kwargs["slug"]
+                    query_slug_access = """
+                        SELECT 1
+                        FROM user_access ua
+                        JOIN access_routes ar ON ua.access_id = ar.access_id
+                        WHERE ua.user_id = %s AND ar.route_slug = %s
+                    """
+                    cursor.execute(query_slug_access, (user_id, slug))
+                    has_slug_access = cursor.fetchone()
+
+                    if has_slug_access:
+                        cursor.close()
+                        conn.close()
+                        return f(*args, **kwargs)
+
+                # Se o usuário não tem permissão nem pelo prefixo nem pelo slug, negar acesso
+                if not has_prefix_access:
+                    cursor.close()
+                    conn.close()
+                    return jsonify({"status": "error", "message": "Permissão negada"}), 403
 
                 cursor.close()
                 conn.close()
-
-                if not result:
-                    return jsonify({"status": "error", "message": "Permissão negada"}), 403
-
                 return f(*args, **kwargs)
 
             except Exception as e:
