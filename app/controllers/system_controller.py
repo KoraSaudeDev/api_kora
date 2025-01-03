@@ -209,7 +209,6 @@ def get_system_profile(user_data, id):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @system_bp.route('/edit/<int:system_id>', methods=['PUT'])
 @token_required
 @admin_required
@@ -258,6 +257,79 @@ def edit_system(user_data, system_id):
             "status": "success",
             "message": "Sistema atualizado com sucesso."
         }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@system_bp.route('/<int:system_id>/routes', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/systems')
+def list_system_routes(user_data, system_id):
+    """
+    Lista todas as rotas relacionadas a um sistema específico.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Query para buscar as rotas associadas ao system_id
+        query_routes = """
+            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at
+            FROM routes r
+            INNER JOIN route_systems rs ON r.id = rs.route_id
+            WHERE rs.system_id = %s
+            ORDER BY r.name
+        """
+        cursor.execute(query_routes, (system_id,))
+        routes = cursor.fetchall()
+
+        # Obter parâmetros associados às rotas
+        query_parameters = """
+            SELECT rp.route_id, rp.name AS parameter_name, rp.type AS parameter_type, rp.value AS parameter_value
+            FROM route_parameters rp
+            WHERE rp.route_id IN (SELECT route_id FROM route_systems WHERE system_id = %s)
+        """
+        cursor.execute(query_parameters, (system_id,))
+        parameters = cursor.fetchall()
+
+        # Organizar parâmetros associados por rota
+        route_parameters = {}
+        for param in parameters:
+            route_id = param["route_id"]
+            if route_id not in route_parameters:
+                route_parameters[route_id] = []
+            route_parameters[route_id].append({
+                "name": param["parameter_name"],
+                "type": param["parameter_type"],
+                "value": param["parameter_value"]
+            })
+
+        cursor.close()
+        conn.close()
+
+        # Montar a resposta
+        response = []
+        for route in routes:
+            response.append({
+                "id": route["id"],
+                "name": route["name"],
+                "slug": route["slug"],
+                "query": route["query"],
+                "created_at": route["created_at"],
+                "updated_at": route["updated_at"],
+                "parameters": route_parameters.get(route["id"], [])
+            })
+
+        return jsonify({
+            "status": "success",
+            "system_id": system_id,
+            "routes": response
+        }), 200
+
     except Exception as e:
         return jsonify({
             "status": "error",

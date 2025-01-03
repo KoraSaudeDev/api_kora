@@ -1,6 +1,7 @@
 import os
 from flask import Blueprint, request, jsonify
 from app.config.db_config import create_db_connection_mysql
+from app.utils.decorators import token_required, admin_required, permission_required
 import logging
 from slugify import slugify 
 
@@ -8,6 +9,8 @@ from slugify import slugify
 access_bp = Blueprint('access', __name__, url_prefix='/access')
 
 @access_bp.route('/create', methods=['POST'])
+@token_required
+@permission_required(route_prefix='/access')
 def create_access():
     try:
         logging.info("Recebendo requisição para criar access.")
@@ -66,6 +69,8 @@ def create_access():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @access_bp.route('/list', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/access')
 def list_access():
     """
     Lista todos os `access` e suas rotas dinâmicas (`slugs`) e fixas (`prefixos`).
@@ -116,6 +121,8 @@ def list_access():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @access_bp.route('/user/create', methods=['POST'])
+@token_required
+@permission_required(route_prefix='/access')
 def assign_access_to_user():
     """
     Associa um usuário a um ou mais `access`.
@@ -150,6 +157,8 @@ def assign_access_to_user():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @access_bp.route('/user/<int:user_id>', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/access')
 def list_user_access(user_id):
     """
     Lista todos os acessos (`access`) e rotas (slugs e prefixos) associados a um usuário.
@@ -183,3 +192,65 @@ def list_user_access(user_id):
     except Exception as e:
         logging.error(f"Erro ao listar acessos do usuário: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+@access_bp.route('/<int:access_id>', methods=['GET'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/access')
+def get_access_details(user_data, access_id):
+    """
+    Retorna os detalhes de um access específico com base no ID fornecido.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Obter o access pelo ID
+        query_access = """
+            SELECT id, name, created_at
+            FROM access
+            WHERE id = %s
+        """
+        cursor.execute(query_access, (access_id,))
+        access = cursor.fetchone()
+
+        if not access:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Access não encontrado."}), 404
+
+        # Obter slugs e prefixos associados
+        query_routes = """
+            SELECT route_slug, route_prefix
+            FROM access_routes
+            WHERE access_id = %s
+        """
+        cursor.execute(query_routes, (access_id,))
+        routes = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Organizar os dados dos slugs e prefixos
+        slugs = [route['route_slug'] for route in routes if route['route_slug']]
+        prefixes = [route['route_prefix'] for route in routes if route['route_prefix']]
+
+        # Montar a resposta
+        response = {
+            "id": access["id"],
+            "name": access["name"],
+            "created_at": access["created_at"],
+            "route_slugs": slugs,
+            "route_prefixes": prefixes
+        }
+
+        return jsonify({
+            "status": "success",
+            "access": response
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
