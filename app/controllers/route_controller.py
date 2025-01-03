@@ -124,62 +124,92 @@ def create_route(user_data):
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
+@admin_required
 @permission_required(route_prefix='/routes')
 def list_routes(user_data):
     """
-    Lista todas as rotas com suas associações.
+    Lista todas as rotas com suas associações e suporta paginação.
     """
     try:
+        # Obter parâmetros de paginação
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 10))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar rotas e associar systems e connections
-        query_routes = """
-            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at
+        # Buscar rotas com paginação
+        query_routes = f"""
+            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at,
+                   GROUP_CONCAT(rs.system_id) AS system_ids,
+                   GROUP_CONCAT(rc.connection_id) AS connection_ids
             FROM routes r
-            ORDER BY r.id
+            LEFT JOIN route_systems rs ON r.id = rs.route_id
+            LEFT JOIN route_connections rc ON r.id = rc.route_id
+            GROUP BY r.id
+            ORDER BY r.name
+            LIMIT {limit} OFFSET {offset}
         """
         cursor.execute(query_routes)
         routes = cursor.fetchall()
 
-        # Obter associações de systems e connections
-        query_systems = "SELECT route_id, system_id FROM route_systems"
-        cursor.execute(query_systems)
-        systems = cursor.fetchall()
+        # Obter parâmetros associados às rotas
+        query_parameters = """
+            SELECT rp.route_id, rp.name AS parameter_name, rp.type AS parameter_type, rp.value AS parameter_value
+            FROM route_parameters rp
+        """
+        cursor.execute(query_parameters)
+        parameters = cursor.fetchall()
 
-        query_connections = "SELECT route_id, connection_id FROM route_connections"
-        cursor.execute(query_connections)
-        connections = cursor.fetchall()
+        # Organizar parâmetros associados por rota
+        route_parameters = {}
+        for param in parameters:
+            route_id = param["route_id"]
+            if route_id not in route_parameters:
+                route_parameters[route_id] = []
+            route_parameters[route_id].append({
+                "name": param["parameter_name"],
+                "type": param["parameter_type"],
+                "value": param["parameter_value"]
+            })
 
-        # Organizar os dados
-        route_data = {}
-        for route in routes:
-            route_id = route['id']
-            route_data[route_id] = {
-                "id": route_id,
-                "name": route['name'],
-                "slug": route['slug'],
-                "created_at": route['created_at'],
-                "updated_at": route['updated_at'],
-                "system_ids": [],
-                "connection_ids": []
-            }
-
-        for system in systems:
-            route_data[system['route_id']]["system_ids"].append(system['system_id'])
-
-        for connection in connections:
-            route_data[connection['route_id']]["connection_ids"].append(connection['connection_id'])
+        # Contar o total de rotas
+        count_query = "SELECT COUNT(*) AS total FROM routes"
+        cursor.execute(count_query)
+        total_count = cursor.fetchone()["total"]
 
         cursor.close()
         conn.close()
 
+        # Organizar a resposta
+        response = []
+        for route in routes:
+            response.append({
+                "id": route["id"],
+                "name": route["name"],
+                "slug": route["slug"],
+                "query": route["query"],
+                "created_at": route["created_at"],
+                "updated_at": route["updated_at"],
+                "system_ids": route["system_ids"].split(",") if route["system_ids"] else [],
+                "connection_ids": route["connection_ids"].split(",") if route["connection_ids"] else [],
+                "parameters": route_parameters.get(route["id"], [])
+            })
+
         return jsonify({
             "status": "success",
-            "routes": list(route_data.values())
+            "page": page,
+            "limit": limit,
+            "total": total_count,
+            "routes": response
         }), 200
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
 
 @route_bp.route('/connections', methods=['POST'])
 @token_required

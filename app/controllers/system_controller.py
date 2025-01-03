@@ -208,3 +208,58 @@ def get_system_profile(user_data, id):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@system_bp.route('/edit/<int:system_id>', methods=['PUT'])
+@token_required
+@admin_required
+@permission_required(route_prefix='/systems')
+def edit_system(user_data, system_id):
+    """
+    Edita as informações de um sistema específico.
+    """
+    try:
+        data = request.json
+        fields_to_update = []
+        values = []
+
+        # Campos permitidos para edição
+        editable_fields = ["name", "description", "is_active"]
+
+        # Construir a query dinamicamente com base nos campos enviados
+        for field in editable_fields:
+            if field in data:
+                fields_to_update.append(f"{field} = %s")
+                values.append(data[field])
+
+        if not fields_to_update:
+            return jsonify({
+                "status": "error",
+                "message": "Nenhum campo válido para atualizar."
+            }), 400
+
+        values.append(system_id)
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor()
+
+        query = f"""
+            UPDATE systems
+            SET {', '.join(fields_to_update)}
+            WHERE id = %s
+        """
+        cursor.execute(query, tuple(values))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "message": "Sistema atualizado com sucesso."
+        }), 200
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
