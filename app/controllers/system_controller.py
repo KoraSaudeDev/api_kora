@@ -4,6 +4,7 @@ import re
 from app.utils.decorators import token_required, admin_required, permission_required
 from app.config.db_config import create_db_connection_mysql
 import cx_Oracle
+import logging
 
 system_bp = Blueprint('systems', __name__, url_prefix='/systems')
 
@@ -263,75 +264,91 @@ def edit_system(user_data, system_id):
             "message": str(e)
         }), 500
 
-
 @system_bp.route('/<int:system_id>/routes', methods=['GET'])
 @token_required
-@admin_required
 @permission_required(route_prefix='/systems')
 def list_system_routes(user_data, system_id):
     """
-    Lista todas as rotas relacionadas a um sistema específico.
+    Lista todas as rotas associadas a um sistema pelo ID do sistema.
+    ---
+    tags:
+      - Systems
+    parameters:
+      - name: system_id
+        in: path
+        required: true
+        type: integer
+        description: ID do sistema para buscar as rotas associadas.
+        example: 1
+    responses:
+      200:
+        description: Lista de rotas associadas ao sistema.
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+              example: success
+            routes:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    example: 1
+                  name:
+                    type: string
+                    example: "Route Name"
+                  slug:
+                    type: string
+                    example: "route-slug"
+                  query:
+                    type: string
+                    example: "SELECT * FROM table"
+                  created_at:
+                    type: string
+                    example: "2024-01-01 12:00:00"
+      404:
+        description: Sistema não encontrado ou sem rotas associadas.
+      500:
+        description: Erro interno no servidor.
     """
     try:
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Query para buscar as rotas associadas ao system_id
+        # Verificar se o sistema existe
+        query_system = "SELECT id, name FROM systems WHERE id = %s"
+        cursor.execute(query_system, (system_id,))
+        system = cursor.fetchone()
+
+        if not system:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Sistema não encontrado."}), 404
+
+        # Obter as rotas associadas ao sistema
         query_routes = """
-            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at
+            SELECT r.id, r.name, r.slug, r.query, r.created_at
             FROM routes r
-            INNER JOIN route_systems rs ON r.id = rs.route_id
+            JOIN route_systems rs ON r.id = rs.route_id
             WHERE rs.system_id = %s
-            ORDER BY r.name
         """
         cursor.execute(query_routes, (system_id,))
         routes = cursor.fetchall()
 
-        # Obter parâmetros associados às rotas
-        query_parameters = """
-            SELECT rp.route_id, rp.name AS parameter_name, rp.type AS parameter_type, rp.value AS parameter_value
-            FROM route_parameters rp
-            WHERE rp.route_id IN (SELECT route_id FROM route_systems WHERE system_id = %s)
-        """
-        cursor.execute(query_parameters, (system_id,))
-        parameters = cursor.fetchall()
-
-        # Organizar parâmetros associados por rota
-        route_parameters = {}
-        for param in parameters:
-            route_id = param["route_id"]
-            if route_id not in route_parameters:
-                route_parameters[route_id] = []
-            route_parameters[route_id].append({
-                "name": param["parameter_name"],
-                "type": param["parameter_type"],
-                "value": param["parameter_value"]
-            })
-
         cursor.close()
         conn.close()
 
-        # Montar a resposta
-        response = []
-        for route in routes:
-            response.append({
-                "id": route["id"],
-                "name": route["name"],
-                "slug": route["slug"],
-                "query": route["query"],
-                "created_at": route["created_at"],
-                "updated_at": route["updated_at"],
-                "parameters": route_parameters.get(route["id"], [])
-            })
+        if not routes:
+            return jsonify({"status": "error", "message": "Nenhuma rota associada ao sistema."}), 404
 
         return jsonify({
             "status": "success",
-            "system_id": system_id,
-            "routes": response
+            "routes": routes
         }), 200
 
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        logging.error(f"Erro ao listar rotas do sistema {system_id}: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
