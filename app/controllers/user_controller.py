@@ -401,26 +401,27 @@ def get_user_profile(user_data):
             if row["route_prefix"]:
                 prefixes.add(row["route_prefix"])
 
-            # Processar slugs e evitar duplicação
-            if row["slug_id"] not in slug_map:
-                slug_map[row["slug_id"]] = {
-                    "id": row["slug_id"],
-                    "name": row["slug_name"],
-                    "slug": row["slug"],
-                    "query": row["query"],
-                    "system": {
-                        "id": row["system_id"],
-                        "name": row["system_name"]
-                    },
-                    "parameters": []
-                }
-            # Adicionar parâmetros relacionados ao slug
-            if row["param_name"]:
-                slug_map[row["slug_id"]]["parameters"].append({
-                    "name": row["param_name"],
-                    "type": row["param_type"],
-                    "value": row["param_value"]
-                })
+            # Ignorar slugs com valores nulos ou incompletos
+            if row["slug_id"] and row["slug"] and row["slug_name"]:
+                if row["slug_id"] not in slug_map:
+                    slug_map[row["slug_id"]] = {
+                        "id": row["slug_id"],
+                        "name": row["slug_name"],
+                        "slug": row["slug"],
+                        "query": row["query"],
+                        "system": {
+                            "id": row["system_id"],
+                            "name": row["system_name"]
+                        },
+                        "parameters": []
+                    }
+                # Adicionar parâmetros relacionados ao slug
+                if row["param_name"]:
+                    slug_map[row["slug_id"]]["parameters"].append({
+                        "name": row["param_name"],
+                        "type": row["param_type"],
+                        "value": row["param_value"]
+                    })
 
         # Converter o mapa de slugs em uma lista
         slugs = list(slug_map.values())
