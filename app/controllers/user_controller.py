@@ -377,16 +377,11 @@ def get_user_profile(user_data):
         cursor.execute(access_query, (user_id,))
         accesses = cursor.fetchall()
 
-        # Organizar rotas em uma única lista
+        # Organizar rotas em uma única lista, removendo duplicações
         routes = {
-            "slugs": [],
-            "prefixes": []
+            "slugs": list(set([slug for access in accesses if access["route_slugs"] for slug in access["route_slugs"].split(",")])),
+            "prefixes": list(set([prefix for access in accesses if access["route_prefixes"] for prefix in access["route_prefixes"].split(",")]))
         }
-        for access in accesses:
-            if access["route_slugs"]:
-                routes["slugs"].extend(access["route_slugs"].split(","))
-            if access["route_prefixes"]:
-                routes["prefixes"].extend(access["route_prefixes"].split(","))
 
         cursor.close()
         conn.close()
@@ -406,7 +401,6 @@ def get_user_profile(user_data):
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required

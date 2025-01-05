@@ -340,14 +340,26 @@ def delete_connection(user_data, connection_id):
 @permission_required(route_prefix='/connections')
 def list_connections_simple(user_data):
     """
-    Lista todas as conexões de banco de dados com campos simplificados.
+    Lista todas as conexões de banco de dados com todos os campos de cada conexão.
     """
     try:
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
+        # Consulta para buscar todas as conexões com todos os detalhes
         query = """
-            SELECT id AS value, name AS label 
+            SELECT 
+                id AS value, 
+                name AS label, 
+                db_type, 
+                host, 
+                port, 
+                username, 
+                database_name, 
+                service_name, 
+                sid, 
+                slug, 
+                created_at
             FROM connections
             ORDER BY id
         """
@@ -357,6 +369,7 @@ def list_connections_simple(user_data):
         cursor.close()
         conn.close()
 
+        # Retornar todos os detalhes das conexões
         return jsonify({
             "status": "success",
             "connections": connections

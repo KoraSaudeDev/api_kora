@@ -284,7 +284,7 @@ def list_route_connections(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
-    Edita uma rota existente com base no ID fornecido.
+    Edita uma rota existente com base no ID fornecido, atualizando os relacionamentos de parâmetros e conexões.
     ---
     tags:
       - Routes
@@ -307,6 +307,25 @@ def edit_route(user_data, route_id):
             description:
               type: string
               example: "Descrição da nova rota"
+            parameters:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    example: "param1"
+                  type:
+                    type: string
+                    example: "string"
+                  value:
+                    type: string
+                    example: "valor"
+            connections:
+              type: array
+              items:
+                type: string
+              example: ["mysql_connection_1", "oracle_connection_2"]
     responses:
       200:
         description: Rota atualizada com sucesso.
@@ -337,6 +356,8 @@ def edit_route(user_data, route_id):
         # Use os valores existentes se os novos não forem fornecidos
         route_prefix = data.get("route_prefix", route["route_prefix"])
         description = data.get("description", route["description"])
+        parameters = data.get("parameters", [])
+        connections = data.get("connections", [])
 
         # Verificar se o novo route_prefix já existe para outra rota
         if route_prefix != route["route_prefix"]:
@@ -358,6 +379,32 @@ def edit_route(user_data, route_id):
             WHERE id = %s
         """
         cursor.execute(query_update, (route_prefix, description, route_id))
+
+        # Remover os relacionamentos antigos de parâmetros e conexões
+        query_delete_parameters = "DELETE FROM route_parameters WHERE route_id = %s"
+        cursor.execute(query_delete_parameters, (route_id,))
+
+        query_delete_connections = "DELETE FROM route_connections WHERE route_id = %s"
+        cursor.execute(query_delete_connections, (route_id,))
+
+        # Inserir novos parâmetros, se fornecidos
+        if parameters:
+            query_insert_parameters = """
+                INSERT INTO route_parameters (route_id, name, type, value)
+                VALUES (%s, %s, %s, %s)
+            """
+            for param in parameters:
+                cursor.execute(query_insert_parameters, (route_id, param["name"], param["type"], param["value"]))
+
+        # Inserir novas conexões, se fornecidas
+        if connections:
+            query_insert_connections = """
+                INSERT INTO route_connections (route_id, connection_id)
+                SELECT %s, id FROM connections WHERE slug = %s
+            """
+            for connection_slug in connections:
+                cursor.execute(query_insert_connections, (route_id, connection_slug))
+
         conn.commit()
 
         cursor.close()
@@ -367,7 +414,7 @@ def edit_route(user_data, route_id):
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
- 
+
 @route_bp.route('/profile/<int:route_id>', methods=['GET'])
 @token_required
 @permission_required(route_prefix='/routes')
@@ -445,6 +492,9 @@ def get_route_details(user_data, route_id):
                       port:
                         type: integer
                         example: 3306
+                      slug:
+                        type: string
+                        example: "mysql_connection"
     """
     try:
         conn = create_db_connection_mysql()
@@ -475,7 +525,7 @@ def get_route_details(user_data, route_id):
 
         # Buscar as conexões associadas à rota
         query_connections = """
-            SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.database_name
+            SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.database_name, c.slug
             FROM connections c
             JOIN route_connections rc ON c.id = rc.connection_id
             WHERE rc.route_id = %s
