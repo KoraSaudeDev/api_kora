@@ -373,12 +373,13 @@ def get_user_profile(user_data):
         cursor.execute(access_query, (user_id,))
         accesses = cursor.fetchall()
 
-        # Obter detalhes das rotas associadas (slugs) sem duplicação
-        slug_query = """
+        # Obter detalhes das rotas associadas (slugs e route_prefixes) sem duplicação
+        slug_and_prefix_query = """
             SELECT DISTINCT 
                 r.id AS slug_id, r.name AS slug_name, r.slug, r.query, r.system_id,
                 s.name AS system_name,
-                rp.name AS param_name, rp.type AS param_type, rp.value AS param_value
+                rp.name AS param_name, rp.type AS param_type, rp.value AS param_value,
+                ar.route_prefix
             FROM access_routes ar
             LEFT JOIN routes r ON ar.route_slug = r.slug
             LEFT JOIN systems s ON r.system_id = s.id
@@ -387,33 +388,39 @@ def get_user_profile(user_data):
                 SELECT access_id FROM user_access WHERE user_id = %s
             )
         """
-        cursor.execute(slug_query, (user_id,))
-        raw_slugs = cursor.fetchall()
+        cursor.execute(slug_and_prefix_query, (user_id,))
+        raw_data = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
         # Processar os slugs e evitar duplicação
         slug_map = {}
-        for slug in raw_slugs:
-            if slug["slug_id"] not in slug_map:
-                slug_map[slug["slug_id"]] = {
-                    "id": slug["slug_id"],
-                    "name": slug["slug_name"],
-                    "slug": slug["slug"],
-                    "query": slug["query"],
+        prefixes = set()
+        for row in raw_data:
+            # Adicionar route_prefix ao conjunto
+            if row["route_prefix"]:
+                prefixes.add(row["route_prefix"])
+
+            # Processar slugs e evitar duplicação
+            if row["slug_id"] not in slug_map:
+                slug_map[row["slug_id"]] = {
+                    "id": row["slug_id"],
+                    "name": row["slug_name"],
+                    "slug": row["slug"],
+                    "query": row["query"],
                     "system": {
-                        "id": slug["system_id"],
-                        "name": slug["system_name"]
+                        "id": row["system_id"],
+                        "name": row["system_name"]
                     },
                     "parameters": []
                 }
             # Adicionar parâmetros relacionados ao slug
-            if slug["param_name"]:
-                slug_map[slug["slug_id"]]["parameters"].append({
-                    "name": slug["param_name"],
-                    "type": slug["param_type"],
-                    "value": slug["param_value"]
+            if row["param_name"]:
+                slug_map[row["slug_id"]]["parameters"].append({
+                    "name": row["param_name"],
+                    "type": row["param_type"],
+                    "value": row["param_value"]
                 })
 
         # Converter o mapa de slugs em uma lista
@@ -429,14 +436,14 @@ def get_user_profile(user_data):
                 "is_active": bool(user["is_active"]),
                 "accesses": accesses,
                 "routes": {
-                    "slugs": slugs
+                    "slugs": slugs,
+                    "prefixes": list(prefixes)  # Converter o conjunto de prefixes em uma lista
                 }
             }
         }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
