@@ -341,7 +341,7 @@ def list_users_with_routes(user_data):
 @permission_required(route_prefix='/users')
 def get_user_profile(user_data):
     """
-    Retorna os dados do usuário ativo e suas permissões (rotas e acessos).
+    Retorna os dados do usuário ativo e suas permissões (rotas e acessos), incluindo detalhes completos.
     """
     try:
         user_id = user_data['id']  # Obtém o ID do usuário ativo a partir do token
@@ -365,28 +365,61 @@ def get_user_profile(user_data):
 
         # Obter acessos associados ao usuário
         access_query = """
-            SELECT a.id AS access_id, a.name AS access_name,
-                   GROUP_CONCAT(DISTINCT ar.route_slug) AS route_slugs,
-                   GROUP_CONCAT(DISTINCT ar.route_prefix) AS route_prefixes
+            SELECT a.id AS access_id, a.name AS access_name
             FROM user_access ua
             JOIN access a ON ua.access_id = a.id
-            LEFT JOIN access_routes ar ON ar.access_id = a.id
             WHERE ua.user_id = %s
-            GROUP BY a.id
         """
         cursor.execute(access_query, (user_id,))
         accesses = cursor.fetchall()
 
-        # Organizar rotas em uma única lista, removendo duplicações
-        routes = {
-            "slugs": list(set([slug for access in accesses if access["route_slugs"] for slug in access["route_slugs"].split(",")])),
-            "prefixes": list(set([prefix for access in accesses if access["route_prefixes"] for prefix in access["route_prefixes"].split(",")]))
-        }
+        # Obter detalhes das rotas associadas (slugs) sem duplicação
+        slug_query = """
+            SELECT DISTINCT 
+                r.id AS slug_id, r.name AS slug_name, r.slug, r.query, r.system_id,
+                s.name AS system_name,
+                rp.name AS param_name, rp.type AS param_type, rp.value AS param_value
+            FROM access_routes ar
+            LEFT JOIN routes r ON ar.route_slug = r.slug
+            LEFT JOIN systems s ON r.system_id = s.id
+            LEFT JOIN route_parameters rp ON rp.route_id = r.id
+            WHERE ar.access_id IN (
+                SELECT access_id FROM user_access WHERE user_id = %s
+            )
+        """
+        cursor.execute(slug_query, (user_id,))
+        raw_slugs = cursor.fetchall()
 
         cursor.close()
         conn.close()
 
-        # Retornar os dados do usuário com os acessos e permissões
+        # Processar os slugs e evitar duplicação
+        slug_map = {}
+        for slug in raw_slugs:
+            if slug["slug_id"] not in slug_map:
+                slug_map[slug["slug_id"]] = {
+                    "id": slug["slug_id"],
+                    "name": slug["slug_name"],
+                    "slug": slug["slug"],
+                    "query": slug["query"],
+                    "system": {
+                        "id": slug["system_id"],
+                        "name": slug["system_name"]
+                    },
+                    "parameters": []
+                }
+            # Adicionar parâmetros relacionados ao slug
+            if slug["param_name"]:
+                slug_map[slug["slug_id"]]["parameters"].append({
+                    "name": slug["param_name"],
+                    "type": slug["param_type"],
+                    "value": slug["param_value"]
+                })
+
+        # Converter o mapa de slugs em uma lista
+        slugs = list(slug_map.values())
+
+        # Retornar os dados do usuário com os acessos e slugs únicos
         return jsonify({
             "status": "success",
             "user": {
@@ -395,12 +428,15 @@ def get_user_profile(user_data):
                 "is_admin": bool(user["is_admin"]),
                 "is_active": bool(user["is_active"]),
                 "accesses": accesses,
-                "routes": routes
+                "routes": {
+                    "slugs": slugs
+                }
             }
         }), 200
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
