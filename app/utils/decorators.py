@@ -39,66 +39,51 @@ def admin_required(f):
         return f(user_data=user_data, *args, **kwargs)
     return decorator
 
-def permission_required(route_prefix):
+def permission_required(route_prefix=None):
     """
-    Decorator para verificar permissões do usuário com base no prefixo da rota e, se necessário, no slug.
+    Decorator para verificar permissões do usuário com base no prefixo da rota.
     """
     def decorator(f):
         @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_data = kwargs.get("user_data")
-
-            # Caso o usuário seja administrador, pula a verificação
-            if user_data.get("is_admin"):
-                return f(*args, **kwargs)
-
+        def decorated_function(user_data=None, *args, **kwargs):
             user_id = user_data.get("id")
-            if not user_id:
-                return jsonify({"status": "error", "message": "Usuário não autenticado"}), 403
+            is_admin = user_data.get("is_admin")
+
+            # Permitir acesso completo para administradores
+            if is_admin:
+                return f(user_data=user_data, *args, **kwargs)
 
             try:
                 conn = create_db_connection_mysql()
                 cursor = conn.cursor(dictionary=True)
 
-                # Verifica se o usuário tem acesso ao prefixo da rota
-                query_prefix_access = """
-                    SELECT 1
+                # Verificar permissões do usuário
+                query = """
+                    SELECT DISTINCT ar.route_prefix, ar.route_slug
                     FROM user_access ua
                     JOIN access_routes ar ON ua.access_id = ar.access_id
-                    WHERE ua.user_id = %s AND ar.route_prefix = %s
+                    WHERE ua.user_id = %s
                 """
-                cursor.execute(query_prefix_access, (user_id, route_prefix))
-                has_prefix_access = cursor.fetchone()
+                cursor.execute(query, (user_id,))
+                permissions = cursor.fetchall()
 
-                # Verificação para slug específico
-                if route_prefix.startswith("/routes/execute") and "slug" in kwargs:
-                    slug = kwargs["slug"]
-                    query_slug_access = """
-                        SELECT 1
-                        FROM user_access ua
-                        JOIN access_routes ar ON ua.access_id = ar.access_id
-                        WHERE ua.user_id = %s AND ar.route_slug = %s
-                    """
-                    cursor.execute(query_slug_access, (user_id, slug))
-                    has_slug_access = cursor.fetchone()
-
-                    if has_slug_access:
-                        cursor.close()
-                        conn.close()
-                        return f(*args, **kwargs)
-
-                # Se o usuário não tem permissão nem pelo prefixo nem pelo slug, negar acesso
-                if not has_prefix_access:
-                    cursor.close()
-                    conn.close()
-                    return jsonify({"status": "error", "message": "Permissão negada"}), 403
+                # Verificar se o usuário possui acesso ao route_prefix ou route_slug
+                allowed_prefixes = [perm['route_prefix'] for perm in permissions if perm['route_prefix']]
+                allowed_slugs = [perm['route_slug'] for perm in permissions if perm['route_slug']]
 
                 cursor.close()
                 conn.close()
-                return f(*args, **kwargs)
+
+                # Validação do route_prefix ou route_slug
+                if route_prefix and route_prefix not in allowed_prefixes:
+                    if kwargs.get('slug') not in allowed_slugs:
+                        return jsonify({"status": "error", "message": "Permissão negada"}), 403
+
+                return f(user_data=user_data, *args, **kwargs)
 
             except Exception as e:
-                return jsonify({"status": "error", "message": f"Erro ao verificar permissões: {str(e)}"}), 500
+                logging.error(f"Erro ao verificar permissões: {e}")
+                return jsonify({"status": "error", "message": f"Erro ao verificar permissões: {e}"}), 500
 
         return decorated_function
     return decorator
