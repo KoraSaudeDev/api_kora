@@ -124,7 +124,7 @@ def create_route(user_data):
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/routes')
 def list_routes(user_data):
     """

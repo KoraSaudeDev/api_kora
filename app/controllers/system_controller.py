@@ -212,7 +212,7 @@ def get_system_profile(user_data, id):
 
 @system_bp.route('/edit/<int:system_id>', methods=['PUT'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/systems')
 def edit_system(user_data, system_id):
     """

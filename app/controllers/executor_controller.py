@@ -11,7 +11,7 @@ executor_bp = Blueprint('executors', __name__, url_prefix='/executors')
 
 @executor_bp.route('/create', methods=['POST'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/executors')
 def create_executor(user_data):
     """
@@ -120,7 +120,7 @@ def create_executor(user_data):
 
 @executor_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/executors')
 def list_executors(user_data):
     """
@@ -252,7 +252,7 @@ def list_executors(user_data):
 
 @executor_bp.route('/list/<int:system_id>', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/executors')
 def list_executors_by_system(user_data, system_id):
     """
@@ -396,7 +396,7 @@ def list_executors_by_system(user_data, system_id):
 
 @executor_bp.route('/validate/<int:executor_id>', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/executors')
 def validate_executor_parameters_route(user_data, executor_id):
     """
@@ -532,7 +532,7 @@ def validate_executor_parameters(executor_id):
 
 @executor_bp.route('/execute/<int:executor_id>', methods=['POST'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/executors')
 def execute_query(user_data, executor_id):
     """

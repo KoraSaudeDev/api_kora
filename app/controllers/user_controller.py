@@ -16,7 +16,7 @@ def validate_json_fields(data, required_fields):
 
 @user_bp.route('/create', methods=['POST'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def create_user(user_data):
     """
@@ -91,7 +91,7 @@ def create_user(user_data):
 
 @user_bp.route('/edit/<int:user_id>', methods=['PUT'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def edit_user(user_data, user_id):
     """
@@ -158,7 +158,7 @@ def edit_user(user_data, user_id):
 
 @user_bp.route('/delete/<int:user_id>', methods=['DELETE'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def delete_user(user_data, user_id):
     """
@@ -193,7 +193,7 @@ def delete_user(user_data, user_id):
 
 @user_bp.route('/restore/<int:user_id>', methods=['PUT'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def restore_user(user_data, user_id):
     """
@@ -224,7 +224,7 @@ def restore_user(user_data, user_id):
 
 @user_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def list_users_with_routes(user_data):
     """
@@ -404,7 +404,7 @@ def get_user_profile(user_data):
 
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/users')
 def get_user_profile_by_id(user_data, user_id):
     """

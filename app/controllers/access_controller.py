@@ -22,7 +22,7 @@ def generate_slug(name):
 
 @access_bp.route('/create', methods=['POST'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/access')
 def create_access(user_data=None):
     """
@@ -204,7 +204,7 @@ def list_user_access(user_data, user_id):
 
 @access_bp.route('/<int:access_id>', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/access')
 def get_access_details(user_data, access_id):
     """

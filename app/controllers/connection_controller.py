@@ -192,7 +192,7 @@ def validate_payload(db_type, data):
 
 @connection_bp.route("/create", methods=["POST"])
 @token_required
-@admin_required
+
 @permission_required(route_prefix="/connections")
 def create_connection(user_data):
     """
@@ -269,7 +269,7 @@ def create_connection(user_data):
 
 @connection_bp.route('/list', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
@@ -311,7 +311,7 @@ def list_connections(user_data):
       
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/connections')
 def delete_connection(user_data, connection_id):
     """
@@ -336,7 +336,7 @@ def delete_connection(user_data, connection_id):
 
 @connection_bp.route('/list-simple', methods=['GET'])
 @token_required
-@admin_required
+
 @permission_required(route_prefix='/connections')
 def list_connections_simple(user_data):
     """
@@ -379,7 +379,7 @@ def list_connections_simple(user_data):
 
 @connection_bp.route("/test/<int:connection_id>", methods=["GET"])
 @token_required
-@admin_required
+
 def test_connection(connection_id, **kwargs):
     """
     Testa uma conexão existente com base no ID.
