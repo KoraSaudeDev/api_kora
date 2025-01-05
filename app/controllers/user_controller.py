@@ -338,7 +338,6 @@ def list_users_with_routes(user_data):
 
 @user_bp.route('/me', methods=['GET'])
 @token_required
-@permission_required(route_prefix='/users')
 def get_user_profile(user_data):
     """
     Retorna os dados do usuário ativo e suas permissões (rotas e acessos), incluindo detalhes completos.
