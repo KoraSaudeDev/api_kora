@@ -372,17 +372,20 @@ def get_user_profile(user_data):
         cursor.execute(access_query, (user_id,))
         accesses = cursor.fetchall()
 
-        # Obter detalhes das rotas associadas (slugs e route_prefixes) sem duplicação
+        # Obter detalhes das rotas associadas (slugs, parameters, systems, connections e route_prefixes)
         slug_and_prefix_query = """
             SELECT DISTINCT 
                 r.id AS slug_id, r.name AS slug_name, r.slug, r.query, r.system_id,
                 s.name AS system_name,
                 rp.name AS param_name, rp.type AS param_type, rp.value AS param_value,
-                ar.route_prefix
+                ar.route_prefix,
+                c.id AS connection_id, c.name AS connection_name, c.db_type, c.host, c.port, c.slug AS connection_slug
             FROM access_routes ar
             LEFT JOIN routes r ON ar.route_slug = r.slug
             LEFT JOIN systems s ON r.system_id = s.id
             LEFT JOIN route_parameters rp ON rp.route_id = r.id
+            LEFT JOIN route_connections rc ON r.id = rc.route_id
+            LEFT JOIN connections c ON rc.connection_id = c.id
             WHERE ar.access_id IN (
                 SELECT access_id FROM user_access WHERE user_id = %s
             )
@@ -413,8 +416,10 @@ def get_user_profile(user_data):
                             "id": row["system_id"],
                             "name": row["system_name"]
                         },
-                        "parameters": []
+                        "parameters": [],
+                        "connections": []
                     }
+
                 # Adicionar parâmetros relacionados ao slug
                 if row["param_name"]:
                     slug_map[row["slug_id"]]["parameters"].append({
@@ -423,10 +428,21 @@ def get_user_profile(user_data):
                         "value": row["param_value"]
                     })
 
+                # Adicionar conexões relacionadas ao slug
+                if row["connection_id"]:
+                    slug_map[row["slug_id"]]["connections"].append({
+                        "id": row["connection_id"],
+                        "name": row["connection_name"],
+                        "db_type": row["db_type"],
+                        "host": row["host"],
+                        "port": row["port"],
+                        "slug": row["connection_slug"]
+                    })
+
         # Converter o mapa de slugs em uma lista
         slugs = list(slug_map.values())
 
-        # Retornar os dados do usuário com os acessos e slugs únicos
+        # Retornar os dados do usuário com os acessos, slugs e conexões únicos
         return jsonify({
             "status": "success",
             "user": {
@@ -444,6 +460,7 @@ def get_user_profile(user_data):
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @user_bp.route('/profile/<int:user_id>', methods=['GET'])
 @token_required

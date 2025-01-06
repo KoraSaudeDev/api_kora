@@ -193,7 +193,6 @@ def validate_payload(db_type, data):
 @connection_bp.route("/create", methods=["POST"])
 @token_required
 
-@permission_required(route_prefix="/connections")
 def create_connection(user_data):
     """
     Cria uma nova conexão de banco de dados.
@@ -266,7 +265,6 @@ def create_connection(user_data):
         return jsonify({"status": "success", "message": "Conexão criada com sucesso."}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 @connection_bp.route('/list', methods=['GET'])
 @token_required
 
@@ -308,7 +306,6 @@ def list_connections(user_data):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-      
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
 
@@ -333,7 +330,6 @@ def delete_connection(user_data, connection_id):
         return jsonify({"status": "success", "message": "Conexão deletada com sucesso."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 @connection_bp.route('/list-simple', methods=['GET'])
 @token_required
 
@@ -376,7 +372,6 @@ def list_connections_simple(user_data):
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 @connection_bp.route("/test/<int:connection_id>", methods=["GET"])
 @token_required
 
