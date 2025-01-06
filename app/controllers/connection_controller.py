@@ -267,7 +267,6 @@ def create_connection(user_data):
 
 @connection_bp.route('/list', methods=['GET'])
 @token_required
-@permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
     Lista todas as conexões com paginação.
