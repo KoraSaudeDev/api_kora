@@ -192,7 +192,6 @@ def validate_payload(db_type, data):
 
 @connection_bp.route("/create", methods=["POST"])
 @token_required
-
 def create_connection(user_data):
     """
     Cria uma nova conexão de banco de dados.
@@ -265,9 +264,9 @@ def create_connection(user_data):
         return jsonify({"status": "success", "message": "Conexão criada com sucesso."}), 201
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 @connection_bp.route('/list', methods=['GET'])
 @token_required
-
 @permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
@@ -290,25 +289,19 @@ def list_connections(user_data):
         cursor.execute(query, (limit, offset))
         connections = cursor.fetchall()
 
-        count_query = "SELECT COUNT(*) AS total FROM connections"
-        cursor.execute(count_query)
+        cursor.execute("SELECT COUNT(*) AS total FROM connections")
         total_count = cursor.fetchone()["total"]
 
         cursor.close()
         conn.close()
 
-        return jsonify({
-            "status": "success",
-            "page": page,
-            "limit": limit,
-            "total": total_count,
-            "connections": connections
-        }), 200
+        return jsonify({"status": "success", "page": page, "limit": limit, "total": total_count, "connections": connections}), 200
     except Exception as e:
+        logging.error(f"Erro ao listar conexões: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
-
 @permission_required(route_prefix='/connections')
 def delete_connection(user_data, connection_id):
     """
@@ -330,9 +323,9 @@ def delete_connection(user_data, connection_id):
         return jsonify({"status": "success", "message": "Conexão deletada com sucesso."}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 @connection_bp.route('/list-simple', methods=['GET'])
 @token_required
-
 @permission_required(route_prefix='/connections')
 def list_connections_simple(user_data):
     """
