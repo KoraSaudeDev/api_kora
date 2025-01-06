@@ -33,7 +33,7 @@ def generate_slug(name):
 @permission_required(route_prefix='/routes')
 def create_route(user_data):
     """
-    Cria uma nova rota, salva no banco e em arquivos, e relaciona com sistemas e conexões.
+    Cria uma nova rota, salva no banco e opcionalmente em arquivos, e relaciona com sistemas e conexões.
     """
     try:
         # Obter os dados da requisição
@@ -57,16 +57,29 @@ def create_route(user_data):
             new_placeholder = f":{param['name']}"
             query = query.replace(placeholder, new_placeholder)
 
+        # Inicializar `query_path` como None (opcional)
+        query_path = None
+
+        # Salvar a query em um arquivo, se necessário
+        save_query_to_file = data.get("save_query_to_file", False)  # Flag opcional
+        if save_query_to_file:
+            system_folder = os.path.join("app", "queries", slug)
+            if not os.path.exists(system_folder):
+                os.makedirs(system_folder)
+            query_path = os.path.join(system_folder, f"{slug}.sql")
+            with open(query_path, "w", encoding="utf-8") as file:
+                file.write(query)
+
         # Conectar ao banco de dados
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
         # Inserir a rota na tabela 'routes'
         query_insert_route = """
-            INSERT INTO routes (name, slug, query, created_at)
-            VALUES (%s, %s, %s, NOW())
+            INSERT INTO routes (name, slug, query, query_path, created_at)
+            VALUES (%s, %s, %s, %s, NOW())
         """
-        cursor.execute(query_insert_route, (name, slug, query))
+        cursor.execute(query_insert_route, (name, slug, query, query_path))
         route_id = cursor.lastrowid
 
         # Relacionar com sistemas na tabela 'route_systems'
@@ -98,15 +111,6 @@ def create_route(user_data):
             for param in parameters:
                 cursor.execute(query_insert_parameters, (route_id, param['name'], param['type'], param['value']))
 
-        # Salvar a query em um arquivo
-        system_folder = os.path.join("app", "queries", slug)
-        if not os.path.exists(system_folder):
-            os.makedirs(system_folder)
-
-        file_path = os.path.join(system_folder, f"{slug}.sql")
-        with open(file_path, "w", encoding="utf-8") as file:
-            file.write(query)
-
         # Confirmar transações no banco de dados
         conn.commit()
         cursor.close()
@@ -116,11 +120,13 @@ def create_route(user_data):
             "status": "success",
             "message": "Rota criada com sucesso.",
             "route_id": route_id,
-            "slug": slug
+            "slug": slug,
+            "query_path": query_path
         }), 201
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
@@ -569,7 +575,7 @@ def execute_route_query(user_data, slug):
 
         # Buscar informações da rota
         query_route = """
-            SELECT r.id, r.query_path, r.query
+            SELECT r.id, r.query
             FROM routes r
             WHERE r.slug = %s
         """
