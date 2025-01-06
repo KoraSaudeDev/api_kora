@@ -325,7 +325,6 @@ def delete_connection(user_data, connection_id):
 
 @connection_bp.route('/list-simple', methods=['GET'])
 @token_required
-@permission_required(route_prefix='/connections')
 def list_connections_simple(user_data):
     """
     Lista todas as conexões de banco de dados com todos os campos de cada conexão.
