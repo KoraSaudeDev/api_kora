@@ -21,14 +21,29 @@ def generate_slug(name):
     return name.strip().replace(' ', '_').lower()
 
 @access_bp.route('/create', methods=['POST'])
-@permission_required(route_prefix='/access')
 @token_required
+@permission_required(route_prefix='/access')
 def create_access(user_data=None):
     """
     Cria um novo `access` e associa rotas dinâmicas (`slugs`) e/ou fixas (`prefixos`).
     """
     try:
-        data = request.json
+        # Validar se o payload foi enviado e se está no formato JSON
+        if not request.is_json:
+            return jsonify({
+                "status": "error",
+                "message": "O corpo da requisição deve estar no formato JSON e o cabeçalho Content-Type deve ser 'application/json'."
+            }), 400
+
+        # Capturar o JSON enviado na requisição
+        data = request.get_json()
+        if data is None:
+            return jsonify({
+                "status": "error",
+                "message": "Nenhum dado foi enviado na requisição ou o formato está incorreto."
+            }), 400
+
+        # Obter os dados do payload
         name = data.get("name")
         route_slugs = data.get("route_slugs", [])  # Rotas dinâmicas
         route_prefixes = data.get("route_prefixes", [])  # Rotas fixas
@@ -52,8 +67,8 @@ def create_access(user_data=None):
 
         # Associar rotas dinâmicas (slugs)
         query_insert_slug_access = "INSERT INTO access_routes (access_id, route_slug) VALUES (%s, %s)"
-        for slug in route_slugs:
-            cursor.execute(query_insert_slug_access, (access_id, slug))
+        for route_slug in route_slugs:
+            cursor.execute(query_insert_slug_access, (access_id, route_slug))
 
         # Associar rotas fixas (prefixos)
         query_insert_prefix_access = "INSERT INTO access_routes (access_id, route_prefix) VALUES (%s, %s)"
@@ -73,6 +88,7 @@ def create_access(user_data=None):
     except Exception as e:
         logging.error(f"Erro ao criar access: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @access_bp.route('/list', methods=['GET'])
 @token_required

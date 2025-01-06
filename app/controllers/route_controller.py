@@ -127,7 +127,6 @@ def create_route(user_data):
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @route_bp.route('/list', methods=['GET'])
 @token_required
 
