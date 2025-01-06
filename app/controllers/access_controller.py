@@ -21,9 +21,8 @@ def generate_slug(name):
     return name.strip().replace(' ', '_').lower()
 
 @access_bp.route('/create', methods=['POST'])
-@token_required
-
 @permission_required(route_prefix='/access')
+@token_required
 def create_access(user_data=None):
     """
     Cria um novo `access` e associa rotas dinâmicas (`slugs`) e/ou fixas (`prefixos`).
@@ -201,7 +200,6 @@ def list_user_access(user_data, user_id):
     except Exception as e:
         logging.error(f"Erro ao listar acessos do usuário: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 @access_bp.route('/<int:access_id>', methods=['GET'])
 @token_required
 
@@ -264,7 +262,6 @@ def get_access_details(user_data, access_id):
             "status": "error",
             "message": str(e)
         }), 500
-
 @access_bp.route('/edit/<int:access_id>', methods=['PUT'])
 @token_required
 @permission_required(route_prefix='/access')
@@ -359,4 +356,49 @@ def remove_user_access(user_data):
 
     except Exception as e:
         logging.error(f"Erro ao remover access do usuário: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@access_bp.route('/user/edit', methods=['PUT'])
+@token_required
+@permission_required(route_prefix='/access')
+def edit_user_access(user_data):
+    """
+    Edita as associações de um usuário com seus acessos.
+    """
+    try:
+        data = request.json
+        user_id = data.get("user_id")
+        new_access_ids = data.get("access_ids", [])
+
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "message": "O campo 'user_id' é obrigatório."
+            }), 400
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor()
+
+        # Remover todas as associações atuais do usuário
+        query_delete_user_access = "DELETE FROM user_access WHERE user_id = %s"
+        cursor.execute(query_delete_user_access, (user_id,))
+
+        # Adicionar as novas associações
+        if new_access_ids:
+            query_insert_user_access = "INSERT INTO user_access (user_id, access_id) VALUES (%s, %s)"
+            for access_id in new_access_ids:
+                cursor.execute(query_insert_user_access, (user_id, access_id))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "status": "success",
+            "message": "Associações atualizadas com sucesso."
+        }), 200
+
+    except Exception as e:
+        logging.error(f"Erro ao editar acessos do usuário: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
