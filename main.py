@@ -7,7 +7,8 @@ from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
-from app.controllers.executor_controller import executor_bp
+# from app.controllers.executor_controller import executor_bp
+from app.controllers.access_controller import access_bp
 
 app = Flask(__name__)
 
@@ -25,6 +26,7 @@ def handle_options():
         response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
 
+
 # Configuração do Swagger
 template = {
     "swagger": "2.0",
@@ -33,8 +35,8 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "127.0.0.1:3793",
-    "basePath": "/api",
+    "host": "172.17.91.170:3793",
+    "basePath": "/",
     "schemes": ["http"],
     "securityDefinitions": {
         "BearerAuth": {
@@ -46,16 +48,32 @@ template = {
     }
 }
 
-swagger = Swagger(app, template=template)
+config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "apispec",
+            "route": "/verzo/docs/apispec.json",
+            "rule_filter": lambda rule: rule.rule.startswith("/api/verzo") or rule.rule.startswith("/api/auth"),
+            "model_filter": lambda tag: True
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/verzo/docs"
+}
+
+swagger = Swagger(app, template=template, config=config)
 
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
-app.register_blueprint(route_bp, url_prefix="/api/route")
-app.register_blueprint(connection_bp, url_prefix="/api/connection")
-app.register_blueprint(system_bp, url_prefix="/api/system")
-app.register_blueprint(user_bp, url_prefix="/api/user")
-app.register_blueprint(executor_bp, url_prefix="/api/executor")
+app.register_blueprint(route_bp, url_prefix="/api/routes")
+app.register_blueprint(connection_bp, url_prefix="/api/connections")
+app.register_blueprint(system_bp, url_prefix="/api/systems")
+app.register_blueprint(user_bp, url_prefix="/api/users")
+# app.register_blueprint(executor_bp, url_prefix="/api/executors")
+app.register_blueprint(access_bp, url_prefix="/api/access")
 
 @app.route('/api', methods=['GET'])
 def home():
@@ -66,13 +84,15 @@ def home():
       - Base
     responses:
       200:
-        description: Mensagem de boas-vindas.
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-              example: "Bem-vindo à API Verzo!"
+        description: Retorna uma mensagem de boas-vindas.
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Bem-vindo à API Verzo!"
     """
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
