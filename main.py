@@ -13,18 +13,19 @@ from app.controllers.access_controller import access_bp
 app = Flask(__name__)
 
 # Configurando CORS para aceitar requisições do frontend no IP e porta corretos
-CORS(app, resources={r"/api/*": {"origins": "http://10.27.254.153:3200"}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10.27.254.153:3200"]}}, supports_credentials=True)
 
 # Middleware para adicionar cabeçalhos de CORS em todas as respostas
 @app.after_request
 def add_cors_headers(response):
-    allowed_origin = "http://10.27.254.153:3200"
-    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    allowed_origins = ["http://localhost:3200", "http://10.27.254.153:3200"]
+    origin = request.headers.get("Origin")
+    if origin in allowed_origins:
+        response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
-
 
 # Configuração do Swagger
 template = {
