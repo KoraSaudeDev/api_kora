@@ -7,20 +7,19 @@ from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
-# from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
 
 app = Flask(__name__)
 
-# Configurando CORS para aceitar requisições do localhost:3000, 3100 e 3200
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:3100", "http://localhost:3200"]}}, supports_credentials=True)
+# Configurando CORS para aceitar requisições do frontend (IP e porta específicos)
+CORS(app, resources={r"/api/*": {"origins": ["http://10.27.254.153:3200"]}}, supports_credentials=True)
 
 # Middleware para tratar requisições OPTIONS manualmente
 @app.before_request
 def handle_options():
     if request.method == 'OPTIONS':
         response = app.make_response("")
-        allowed_origins = ["http://localhost:3000", "http://localhost:3100", "http://localhost:3200"]
+        allowed_origins = ["http://10.27.254.153:3200"]
         origin = request.headers.get("Origin")
         if origin in allowed_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
@@ -38,7 +37,7 @@ template = {
         "description": "Documentação da API Verzo utilizando Swagger.",
         "version": "1.0.0"
     },
-    "host": "172.17.91.170:3793",
+    "host": "10.27.254.153:3793",
     "basePath": "/",
     "schemes": ["http"],
     "securityDefinitions": {
@@ -75,7 +74,6 @@ app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
 app.register_blueprint(user_bp, url_prefix="/api/users")
-# app.register_blueprint(executor_bp, url_prefix="/api/executors")
 app.register_blueprint(access_bp, url_prefix="/api/access")
 
 @app.route('/api', methods=['GET'])
