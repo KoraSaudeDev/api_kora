@@ -12,19 +12,18 @@ from app.controllers.access_controller import access_bp
 
 app = Flask(__name__)
 
-# Configurando CORS para aceitar requisições do localhost:3000
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:3200"}}, supports_credentials=True)
+# Configurando CORS para aceitar requisições do frontend no IP e porta corretos
+CORS(app, resources={r"/api/*": {"origins": "http://10.27.254.153:3200"}}, supports_credentials=True)
 
-# Middleware para tratar requisições OPTIONS manualmente
-@app.before_request
-def handle_options():
-    if request.method == 'OPTIONS':
-        response = app.make_response("")
-        response.headers["Access-Control-Allow-Origin"] = "http://localhost:3200"
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        return response
+# Middleware para adicionar cabeçalhos de CORS em todas as respostas
+@app.after_request
+def add_cors_headers(response):
+    allowed_origin = "http://10.27.254.153:3200"
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 
 # Configuração do Swagger
