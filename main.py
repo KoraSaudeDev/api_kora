@@ -13,7 +13,7 @@ from app.controllers.access_controller import access_bp
 app = Flask(__name__)
 
 # Configurando CORS para aceitar requisições do localhost:3000
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:3100"]}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:3100","http://localhost:3200"]}}, supports_credentials=True)
 
 # Middleware para tratar requisições OPTIONS manualmente
 @app.before_request
