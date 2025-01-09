@@ -366,6 +366,74 @@ def list_connections_simple(user_data):
 @connection_bp.route("/test/<int:connection_id>", methods=["GET"])
 @token_required
 
+@connection_bp.route('/edit/<int:connection_id>', methods=['PUT'])
+@token_required
+@permission_required(route_prefix='/connections')
+def edit_connection(user_data, connection_id):
+    """
+    Edita uma conexão existente com base no ID fornecido.
+    """
+    try:
+        # Obter os dados da requisição
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
+
+        # Validar se a conexão existe
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+        query_check = "SELECT id FROM connections WHERE id = %s"
+        cursor.execute(query_check, (connection_id,))
+        connection = cursor.fetchone()
+
+        if not connection:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
+
+        # Construir a query de atualização dinamicamente
+        update_fields = []
+        update_values = []
+
+        editable_fields = [
+            "name", "db_type", "host", "port", "username", "password", "database_name", "service_name", "sid", "extra_params"
+        ]
+
+        for field in editable_fields:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                if field == "password":  # Criptografar senha ao atualizar
+                    update_values.append(encrypt_password(data[field]))
+                else:
+                    update_values.append(data[field])
+
+        if not update_fields:
+            return jsonify({"status": "error", "message": "Nenhum campo válido para atualizar."}), 400
+
+        # Adicionar o ID da conexão para a cláusula WHERE
+        update_values.append(connection_id)
+
+        # Atualizar no banco de dados
+        query_update = f"""
+            UPDATE connections
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """
+        cursor.execute(query_update, tuple(update_values))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "message": "Conexão atualizada com sucesso."}), 200
+
+    except Exception as e:
+        logging.error(f"Erro ao editar conexão: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@connection_bp.route('/test/<int:connection_id>', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/connections')
 def test_connection(connection_id, **kwargs):
     """
     Testa uma conexão existente com base no ID.

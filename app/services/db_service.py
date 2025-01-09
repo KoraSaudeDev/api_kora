@@ -129,19 +129,65 @@ class DatabaseService:
             raise ConnectionError(f"Erro ao conectar ao banco {db_type}: {e}")
 
     @staticmethod
-    def test_connection(**kwargs):
-        """
-        Testa a conexão sem executar queries.
-        """
-        try:
-            conn = DatabaseService.create_connection(**kwargs)
-            if conn:
-                logging.info(f"Conexão bem-sucedida com o banco {kwargs.get('db_type')}.")
-                return True
-        except Exception as e:
-            logging.error(f"Erro ao testar a conexão: {e}")
-            return False
-        
+    class DatabaseService:
+        @staticmethod
+        def test_connection(db_type, host=None, port=None, username=None, password=None, database=None, service_name=None, sid=None, extra_params=None):
+            try:
+                if db_type == "mysql" or db_type == "mariadb":
+                    import mysql.connector
+                    conn = mysql.connector.connect(
+                        host=host,
+                        port=port,
+                        user=username,
+                        password=password,
+                        database=database
+                    )
+                    conn.close()
+                elif db_type == "postgres":
+                    import psycopg2
+                    conn = psycopg2.connect(
+                        host=host,
+                        port=port,
+                        user=username,
+                        password=password,
+                        database=database
+                    )
+                    conn.close()
+                elif db_type == "oracle":
+                    import cx_Oracle
+                    dsn = cx_Oracle.makedsn(host, port, sid=sid, service_name=service_name)
+                    conn = cx_Oracle.connect(user=username, password=password, dsn=dsn)
+                    conn.close()
+                elif db_type == "sqlite":
+                    import sqlite3
+                    conn = sqlite3.connect(database)
+                    conn.close()
+                elif db_type == "mongodb":
+                    from pymongo import MongoClient
+                    uri = f"mongodb://{username}:{password}@{host}:{port}/"
+                    client = MongoClient(uri)
+                    client.admin.command('ping')
+                elif db_type == "redis":
+                    import redis
+                    conn = redis.StrictRedis(host=host, port=port, password=password)
+                    conn.ping()
+                elif db_type == "snowflake":
+                    import snowflake.connector
+                    conn = snowflake.connector.connect(
+                        user=username,
+                        password=password,
+                        account=host,
+                        database=database,
+                        warehouse=extra_params.get("warehouse")
+                    )
+                    conn.close()
+                else:
+                    return {"status": "error", "message": f"Tipo de banco de dados '{db_type}' não suportado."}
+
+                return {"status": "success", "message": "Conexão testada com sucesso."}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+
     @staticmethod
     def test_existing_connection(connection_data):
         """
