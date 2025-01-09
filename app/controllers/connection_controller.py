@@ -192,6 +192,7 @@ def validate_payload(db_type, data):
 
 @connection_bp.route("/create", methods=["POST"])
 @token_required
+@permission_required(route_prefix='/connections')
 def create_connection(user_data):
     """
     Cria uma nova conexão de banco de dados.
@@ -204,18 +205,12 @@ def create_connection(user_data):
         if not name or not db_type:
             return jsonify({"status": "error", "message": "Os campos 'name' e 'db_type' são obrigatórios."}), 400
 
-        # Gerar slug
         slug = generate_slug(name)
-
-        # Validar os campos obrigatórios com base no tipo de banco
         missing_fields = validate_payload(db_type.lower(), data)
-        if missing_fields:
-            return jsonify({
-                "status": "error",
-                "message": f"Campos obrigatórios ausentes: {', '.join(missing_fields)}"
-            }), 400
 
-        # Testar a conexão usando o DatabaseService
+        if missing_fields:
+            return jsonify({"status": "error", "message": f"Campos obrigatórios ausentes: {', '.join(missing_fields)}"}), 400
+
         if not DatabaseService.test_connection(
             db_type=db_type,
             host=data.get("host"),
@@ -229,10 +224,8 @@ def create_connection(user_data):
         ):
             return jsonify({"status": "error", "message": "Erro ao testar a conexão."}), 400
 
-        # Criptografar a senha
         encrypted_password = encrypt_password(data["password"])
 
-        # Salvar a conexão no banco
         conn = create_db_connection_mysql()
         cursor = conn.cursor()
 
@@ -263,10 +256,103 @@ def create_connection(user_data):
 
         return jsonify({"status": "success", "message": "Conexão criada com sucesso."}), 201
     except Exception as e:
+        logging.error(f"Erro ao criar conexão: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# Editar uma conexão existente
+@connection_bp.route('/edit/<int:connection_id>', methods=['PUT'])
+@token_required
+@permission_required(route_prefix='/connections')
+def edit_connection(user_data, connection_id):
+    """
+    Edita uma conexão existente com base no ID fornecido.
+    """
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
+
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        query_check = "SELECT id FROM connections WHERE id = %s"
+        cursor.execute(query_check, (connection_id,))
+        connection = cursor.fetchone()
+
+        if not connection:
+            cursor.close()
+            conn.close()
+            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
+
+        update_fields = []
+        update_values = []
+
+        editable_fields = [
+            "name", "db_type", "host", "port", "username", "password", "database_name", "service_name", "sid", "extra_params"
+        ]
+
+        for field in editable_fields:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                if field == "password":
+                    update_values.append(encrypt_password(data[field]))
+                else:
+                    update_values.append(data[field])
+
+        if not update_fields:
+            return jsonify({"status": "error", "message": "Nenhum campo válido para atualizar."}), 400
+
+        update_values.append(connection_id)
+
+        query_update = f"""
+            UPDATE connections
+            SET {', '.join(update_fields)}
+            WHERE id = %s
+        """
+        cursor.execute(query_update, tuple(update_values))
+        conn.commit()
+
+        cursor.close()
+        conn.close()
+
+        return jsonify({"status": "success", "message": "Conexão atualizada com sucesso."}), 200
+
+    except Exception as e:
+        logging.error(f"Erro ao editar conexão: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Testar uma conexão existente
+@connection_bp.route("/test/<int:connection_id>", methods=["GET"])
+@token_required
+@permission_required(route_prefix="/connections")
+def test_database_connection(user_data, connection_id):
+    """
+    Testa uma conexão existente com base no ID.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        query = "SELECT * FROM connections WHERE id = %s"
+        cursor.execute(query, (connection_id,))
+        connection_data = cursor.fetchone()
+
+        cursor.close()
+        conn.close()
+
+        if not connection_data:
+            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
+
+        result = DatabaseService.test_existing_connection(connection_data)
+        return jsonify(result), 200 if result["status"] == "success" else 400
+    except Exception as e:
+        logging.error(f"Erro ao testar conexão: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# Listar conexões
 @connection_bp.route('/list', methods=['GET'])
 @token_required
+@permission_required(route_prefix='/connections')
 def list_connections(user_data):
     """
     Lista todas as conexões com paginação.
@@ -299,6 +385,7 @@ def list_connections(user_data):
         logging.error(f"Erro ao listar conexões: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# Deletar uma conexão
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
 @permission_required(route_prefix='/connections')
@@ -321,141 +408,5 @@ def delete_connection(user_data, connection_id):
         conn.close()
         return jsonify({"status": "success", "message": "Conexão deletada com sucesso."}), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@connection_bp.route('/list-simple', methods=['GET'])
-@token_required
-def list_connections_simple(user_data):
-    """
-    Lista todas as conexões de banco de dados com todos os campos de cada conexão.
-    """
-    try:
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        # Consulta para buscar todas as conexões com todos os detalhes
-        query = """
-            SELECT 
-                id AS value, 
-                name AS label, 
-                db_type, 
-                host, 
-                port, 
-                username, 
-                database_name, 
-                service_name, 
-                sid, 
-                slug, 
-                created_at
-            FROM connections
-            ORDER BY id
-        """
-        cursor.execute(query)
-        connections = cursor.fetchall()
-
-        cursor.close()
-        conn.close()
-
-        # Retornar todos os detalhes das conexões
-        return jsonify({
-            "status": "success",
-            "connections": connections
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-@connection_bp.route("/test/<int:connection_id>", methods=["GET"])
-@token_required
-
-@connection_bp.route('/edit/<int:connection_id>', methods=['PUT'])
-@token_required
-@permission_required(route_prefix='/connections')
-def edit_connection(user_data, connection_id):
-    """
-    Edita uma conexão existente com base no ID fornecido.
-    """
-    try:
-        # Obter os dados da requisição
-        data = request.json
-        if not data:
-            return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
-
-        # Validar se a conexão existe
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-        query_check = "SELECT id FROM connections WHERE id = %s"
-        cursor.execute(query_check, (connection_id,))
-        connection = cursor.fetchone()
-
-        if not connection:
-            cursor.close()
-            conn.close()
-            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
-
-        # Construir a query de atualização dinamicamente
-        update_fields = []
-        update_values = []
-
-        editable_fields = [
-            "name", "db_type", "host", "port", "username", "password", "database_name", "service_name", "sid", "extra_params"
-        ]
-
-        for field in editable_fields:
-            if field in data:
-                update_fields.append(f"{field} = %s")
-                if field == "password":  # Criptografar senha ao atualizar
-                    update_values.append(encrypt_password(data[field]))
-                else:
-                    update_values.append(data[field])
-
-        if not update_fields:
-            return jsonify({"status": "error", "message": "Nenhum campo válido para atualizar."}), 400
-
-        # Adicionar o ID da conexão para a cláusula WHERE
-        update_values.append(connection_id)
-
-        # Atualizar no banco de dados
-        query_update = f"""
-            UPDATE connections
-            SET {', '.join(update_fields)}
-            WHERE id = %s
-        """
-        cursor.execute(query_update, tuple(update_values))
-        conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return jsonify({"status": "success", "message": "Conexão atualizada com sucesso."}), 200
-
-    except Exception as e:
-        logging.error(f"Erro ao editar conexão: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@connection_bp.route('/test/<int:connection_id>', methods=['GET'])
-@token_required
-@permission_required(route_prefix='/connections')
-def test_connection(connection_id, **kwargs):
-    """
-    Testa uma conexão existente com base no ID.
-    """
-    try:
-        # Conectar ao banco para buscar os dados da conexão
-        conn = create_db_connection_mysql()
-        cursor = conn.cursor(dictionary=True)
-
-        # Buscar conexão pelo ID
-        query = "SELECT * FROM connections WHERE id = %s"
-        cursor.execute(query, (connection_id,))
-        connection_data = cursor.fetchone()
-
-        cursor.close()
-        conn.close()
-
-        if not connection_data:
-            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
-
-        # Testar a conexão
-        result = DatabaseService.test_existing_connection(connection_data)
-        return jsonify(result), 200 if result["status"] == "success" else 400
-    except Exception as e:
+        logging.error(f"Erro ao deletar conexão: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
