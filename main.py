@@ -13,12 +13,12 @@ from app.controllers.access_controller import access_bp
 app = Flask(__name__)
 
 # Configurando CORS para aceitar requisições do frontend no IP e porta corretos
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10.27.254.153:3200"]}}, supports_credentials=True)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100""http://localhost:3000", "http://10.27.254.153:3000"]}}, supports_credentials=True)
 
 # Middleware para adicionar cabeçalhos de CORS em todas as respostas
 @app.after_request
 def add_cors_headers(response):
-    allowed_origins = ["http://localhost:3200", "http://10.27.254.153:3200"]
+    allowed_origins = ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100""http://localhost:3000", "http://10.27.254.153:3000"]
     origin = request.headers.get("Origin")
     if origin in allowed_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
