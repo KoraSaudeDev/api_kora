@@ -385,6 +385,44 @@ def list_connections(user_data):
         logging.error(f"Erro ao listar conexões: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# Obter uma única conexão pelo ID
+@connection_bp.route('/<int:connection_id>', methods=['GET'])
+@token_required
+@permission_required(route_prefix='/connections')
+def get_connection_by_id(user_data, connection_id):
+    """
+    Retorna os detalhes de uma conexão específica com base no ID fornecido.
+    """
+    try:
+        # Conectar ao banco de dados
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        # Consultar a conexão pelo ID
+        query = """
+            SELECT id, name, db_type, host, port, username, database_name, service_name, sid, extra_params, created_at, updated_at
+            FROM connections
+            WHERE id = %s
+        """
+        cursor.execute(query, (connection_id,))
+        connection = cursor.fetchone()
+
+        # Fechar conexão com o banco de dados
+        cursor.close()
+        conn.close()
+
+        # Verificar se a conexão foi encontrada
+        if not connection:
+            return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
+
+        # Retornar os detalhes da conexão
+        return jsonify({"status": "success", "connection": connection}), 200
+
+    except Exception as e:
+        logging.error(f"Erro ao buscar conexão pelo ID: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # Deletar uma conexão
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
 @token_required
