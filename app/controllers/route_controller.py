@@ -289,129 +289,88 @@ def list_route_connections(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
-    Edita uma rota existente com base no ID fornecido, atualizando os relacionamentos de parâmetros e conexões.
-    ---
-    tags:
-      - Routes
-    parameters:
-      - name: route_id
-        in: path
-        required: true
-        type: integer
-        description: ID da rota a ser editada.
-        example: 1
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          properties:
-            route_prefix:
-              type: string
-              example: "/nova/rota"
-            description:
-              type: string
-              example: "Descrição da nova rota"
-            parameters:
-              type: array
-              items:
-                type: object
-                properties:
-                  name:
-                    type: string
-                    example: "param1"
-                  type:
-                    type: string
-                    example: "string"
-                  value:
-                    type: string
-                    example: "valor"
-            connections:
-              type: array
-              items:
-                type: string
-              example: ["mysql_connection_1", "oracle_connection_2"]
-    responses:
-      200:
-        description: Rota atualizada com sucesso.
-      400:
-        description: Nenhum dado para atualizar ou valor duplicado.
-      404:
-        description: Rota não encontrada.
-      500:
-        description: Erro interno no servidor.
+    Edita uma rota existente com base no ID fornecido.
     """
     try:
+        # Obter os dados da requisição
         data = request.json
+        if not data:
+            return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
 
-        # Conectar ao banco e buscar os dados existentes da rota
+        # Conectar ao banco de dados
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Obter os valores existentes da rota
-        query_get_route = "SELECT route_prefix, description FROM routes WHERE id = %s"
-        cursor.execute(query_get_route, (route_id,))
-        route = cursor.fetchone()
+        # Validar se a rota existe
+        query_check_route = "SELECT * FROM routes WHERE id = %s"
+        cursor.execute(query_check_route, (route_id,))
+        existing_route = cursor.fetchone()
 
-        if not route:
+        if not existing_route:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Use os valores existentes se os novos não forem fornecidos
-        route_prefix = data.get("route_prefix", route["route_prefix"])
-        description = data.get("description", route["description"])
-        parameters = data.get("parameters", [])
-        connections = data.get("connections", [])
+        # Atualizar os campos da rota
+        update_fields = []
+        update_values = []
+        editable_fields = ["name", "query"]
+        for field in editable_fields:
+            if field in data:
+                update_fields.append(f"{field} = %s")
+                update_values.append(data[field])
 
-        # Verificar se o novo route_prefix já existe para outra rota
-        if route_prefix != route["route_prefix"]:
-            query_check_duplicate = "SELECT id FROM routes WHERE route_prefix = %s AND id != %s"
-            cursor.execute(query_check_duplicate, (route_prefix, route_id))
-            duplicate = cursor.fetchone()
-            if duplicate:
-                cursor.close()
-                conn.close()
-                return jsonify({
-                    "status": "error",
-                    "message": f"O route_prefix '{route_prefix}' já está em uso por outra rota."
-                }), 400
+        if update_fields:
+            # Atualizar slug se o nome for alterado
+            if "name" in data:
+                slug = generate_slug(data["name"])
+                update_fields.append("slug = %s")
+                update_values.append(slug)
 
-        # Atualizar os valores da rota no banco
-        query_update = """
-            UPDATE routes
-            SET route_prefix = %s, description = %s
-            WHERE id = %s
-        """
-        cursor.execute(query_update, (route_prefix, description, route_id))
+            # Atualizar `query_path` se necessário
+            save_query_to_file = data.get("save_query_to_file", False)
+            if save_query_to_file and "query" in data:
+                slug = generate_slug(data["name"]) if "name" in data else existing_route["slug"]
+                system_folder = os.path.join("app", "queries", slug)
+                if not os.path.exists(system_folder):
+                    os.makedirs(system_folder)
+                query_path = os.path.join(system_folder, f"{slug}.sql")
+                with open(query_path, "w", encoding="utf-8") as file:
+                    file.write(data["query"])
+                update_fields.append("query_path = %s")
+                update_values.append(query_path)
 
-        # Remover os relacionamentos antigos de parâmetros e conexões
-        query_delete_parameters = "DELETE FROM route_parameters WHERE route_id = %s"
-        cursor.execute(query_delete_parameters, (route_id,))
+            update_values.append(route_id)
+            query_update_route = f"UPDATE routes SET {', '.join(update_fields)} WHERE id = %s"
+            cursor.execute(query_update_route, tuple(update_values))
 
-        query_delete_connections = "DELETE FROM route_connections WHERE route_id = %s"
-        cursor.execute(query_delete_connections, (route_id,))
+        # Atualizar sistemas relacionados
+        if "system_id" in data:
+            cursor.execute("DELETE FROM route_systems WHERE route_id = %s", (route_id,))
+            system_ids = data["system_id"]
+            if not isinstance(system_ids, list):
+                system_ids = [system_ids]
+            for system_id in system_ids:
+                cursor.execute("INSERT INTO route_systems (route_id, system_id) VALUES (%s, %s)", (route_id, system_id))
 
-        # Inserir novos parâmetros, se fornecidos
-        if parameters:
-            query_insert_parameters = """
-                INSERT INTO route_parameters (route_id, name, type, value)
-                VALUES (%s, %s, %s, %s)
-            """
+        # Atualizar conexões relacionadas
+        if "connection_ids" in data:
+            cursor.execute("DELETE FROM route_connections WHERE route_id = %s", (route_id,))
+            connection_ids = data["connection_ids"]
+            for connection_id in connection_ids:
+                cursor.execute("INSERT INTO route_connections (route_id, connection_id) VALUES (%s, %s)", (route_id, connection_id))
+
+        # Atualizar parâmetros
+        if "parameters" in data:
+            cursor.execute("DELETE FROM route_parameters WHERE route_id = %s", (route_id,))
+            parameters = data["parameters"]
             for param in parameters:
-                cursor.execute(query_insert_parameters, (route_id, param["name"], param["type"], param["value"]))
-
-        # Inserir novas conexões, se fornecidas
-        if connections:
-            query_insert_connections = """
-                INSERT INTO route_connections (route_id, connection_id)
-                SELECT %s, id FROM connections WHERE slug = %s
-            """
-            for connection_slug in connections:
-                cursor.execute(query_insert_connections, (route_id, connection_slug))
+                cursor.execute(
+                    "INSERT INTO route_parameters (route_id, name, type, value) VALUES (%s, %s, %s, %s)",
+                    (route_id, param["name"], param["type"], param["value"])
+                )
 
         conn.commit()
-
         cursor.close()
         conn.close()
 
