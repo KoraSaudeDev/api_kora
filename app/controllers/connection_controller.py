@@ -400,7 +400,7 @@ def get_connection_by_id(user_data, connection_id):
 
         # Consultar a conexão pelo ID
         query = """
-            SELECT id, name, db_type, host, port, username, database_name, service_name, sid, extra_params, created_at, updated_at
+            SELECT id, name, db_type, host, port, username, database_name, service_name, sid, extra_params, created_at
             FROM connections
             WHERE id = %s
         """
@@ -421,7 +421,6 @@ def get_connection_by_id(user_data, connection_id):
     except Exception as e:
         logging.error(f"Erro ao buscar conexão pelo ID: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 # Deletar uma conexão
 @connection_bp.route('/delete/<int:connection_id>', methods=['DELETE'])
