@@ -384,81 +384,7 @@ def edit_route(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def get_route_details(user_data, route_id):
     """
-    Retorna os detalhes de uma rota específica com base no ID fornecido, incluindo parâmetros e conexões vinculadas.
-    ---
-    tags:
-      - Routes
-    parameters:
-      - name: route_id
-        in: path
-        required: true
-        type: integer
-        description: ID da rota para buscar os detalhes.
-        example: 1
-    responses:
-      200:
-        description: Detalhes da rota.
-        schema:
-          type: object
-          properties:
-            status:
-              type: string
-              example: "success"
-            route:
-              type: object
-              properties:
-                id:
-                  type: integer
-                  example: 1
-                name:
-                  type: string
-                  example: "Minha Rota"
-                slug:
-                  type: string
-                  example: "minha_rota"
-                query:
-                  type: string
-                  example: "SELECT * FROM tabela"
-                description:
-                  type: string
-                  example: "Descrição da rota"
-                parameters:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                        example: "param1"
-                      type:
-                        type: string
-                        example: "string"
-                      value:
-                        type: string
-                        example: "valor"
-                connections:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        example: 1
-                      name:
-                        type: string
-                        example: "Conexão MySQL"
-                      db_type:
-                        type: string
-                        example: "mysql"
-                      host:
-                        type: string
-                        example: "127.0.0.1"
-                      port:
-                        type: integer
-                        example: 3306
-                      slug:
-                        type: string
-                        example: "mysql_connection"
+    Retorna os detalhes de uma rota específica com base no ID fornecido, incluindo parâmetros, conexões e sistemas vinculados.
     """
     try:
         conn = create_db_connection_mysql()
@@ -497,12 +423,23 @@ def get_route_details(user_data, route_id):
         cursor.execute(query_connections, (route_id,))
         connections = cursor.fetchall()
 
+        # Buscar os sistemas associados à rota
+        query_systems = """
+            SELECT s.id, s.name, s.slug
+            FROM systems s
+            JOIN route_systems rs ON s.id = rs.system_id
+            WHERE rs.route_id = %s
+        """
+        cursor.execute(query_systems, (route_id,))
+        systems = cursor.fetchall()
+
         cursor.close()
         conn.close()
 
-        # Retornar os detalhes da rota com parâmetros e conexões
+        # Adicionar parâmetros, conexões e sistemas ao objeto da rota
         route["parameters"] = parameters
         route["connections"] = connections
+        route["systems"] = systems
 
         return jsonify({
             "status": "success",
@@ -510,6 +447,7 @@ def get_route_details(user_data, route_id):
         }), 200
 
     except Exception as e:
+        logging.error(f"Erro ao buscar detalhes da rota: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @route_bp.route('/execute/<slug>', methods=['POST'])
