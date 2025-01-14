@@ -447,3 +447,42 @@ def delete_connection(user_data, connection_id):
     except Exception as e:
         logging.error(f"Erro ao deletar conexão: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@connection_bp.route('/list-simple', methods=['GET'])
+@token_required
+def list_connections_simple(user_data):
+    """
+    Lista todas as conexões de banco de dados com todos os campos de cada conexão.
+    """
+    try:
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+        # Consulta para buscar todas as conexões com todos os detalhes
+        query = """
+            SELECT 
+                id AS value, 
+                name AS label, 
+                db_type, 
+                host, 
+                port, 
+                username, 
+                database_name, 
+                service_name, 
+                sid, 
+                slug, 
+                created_at
+            FROM connections
+            ORDER BY id
+        """
+        cursor.execute(query)
+        connections = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        # Retornar todos os detalhes das conexões
+        return jsonify({
+            "status": "success",
+            "connections": connections
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
