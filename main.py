@@ -3,6 +3,7 @@ from flasgger import Swagger
 from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
 from app.controllers.verzo_controller import verzo_bp
+from app.controllers.depara_controller import depara_bp
 from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
@@ -68,6 +69,7 @@ swagger = Swagger(app, template=template, config=config)
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
+app.register_blueprint(depara_bp, url_prefix="/api/depara")
 app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
