@@ -2,7 +2,6 @@ import mysql.connector
 import cx_Oracle
 import psycopg2
 import sqlite3
-import pyodbc
 from sqlalchemy import create_engine
 from hdbcli import dbapi
 import redis
