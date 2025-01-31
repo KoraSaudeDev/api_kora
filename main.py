@@ -9,6 +9,7 @@ from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 # from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
+from app.controllers.depara_controller import depara_bp
 import logging
 import sys
 from app import create_app
@@ -83,6 +84,7 @@ swagger = Swagger(app, template=template, config=config)
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
+app.register_blueprint(depara_bp, url_prefix="/api/depara")
 app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
