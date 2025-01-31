@@ -4,6 +4,10 @@ import jwt
 from app.config.env import SECRET_KEY
 from app.utils.helpers import check_user_permission
 from app.config.db_config import create_db_connection_mysql 
+import logging
+# Configurando logs
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 def token_required(f):
     @wraps(f)
@@ -17,16 +21,21 @@ def token_required(f):
                 token = auth_header.split("Bearer ")[1]
 
         if not token:
+            logger.error("Token não encontrado no cabeçalho Authorization.")
             return jsonify({"status": "error", "message": "Token é necessário"}), 401
 
         try:
             # Decodifica o token JWT
             data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            logger.debug(f"Token decodificado com sucesso: {data}")
         except jwt.ExpiredSignatureError:
+            logger.error("Token expirado.")
             return jsonify({"status": "error", "message": "Token expirado"}), 401
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+            logger.error(f"Token inválido: {str(e)}")
             return jsonify({"status": "error", "message": "Token inválido"}), 401
 
+        # Passa o payload decodificado como user_data para a função protegida
         return f(user_data=data, *args, **kwargs)
     return decorator
 
