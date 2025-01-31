@@ -9,24 +9,8 @@ from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 # from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
-from app.controllers.depara_controller import depara_bp
-import logging
-import sys
-from app import create_app
 
-app = create_app()
-
-logging.basicConfig(
-    level=logging.DEBUG,  # Garantir que DEBUG será exibido
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout)  # Redireciona logs para stdout
-    ],
-)
-
-# Configurando logs específicos para Flask
-flask_logger = logging.getLogger('flask.app')
-flask_logger.setLevel(logging.DEBUG)
+app = Flask(__name__)
 
 # Configurando CORS para aceitar requisições do frontend no IP e porta corretos
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100""http://localhost:3000", "http://10.27.254.153:3000"]}}, supports_credentials=True)
@@ -84,7 +68,6 @@ swagger = Swagger(app, template=template, config=config)
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
-app.register_blueprint(depara_bp, url_prefix="/api/depara")
 app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
