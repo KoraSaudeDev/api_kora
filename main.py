@@ -3,6 +3,7 @@ from flasgger import Swagger
 from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
 from app.controllers.verzo_controller import verzo_bp
+from app.controllers.depara_controller import depara_bp
 from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
@@ -18,7 +19,7 @@ CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10
 # Middleware para adicionar cabeçalhos de CORS em todas as respostas
 @app.after_request
 def add_cors_headers(response):
-    allowed_origins = ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100""http://localhost:3000", "http://10.27.254.153:3000"]
+    allowed_origins = ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100","http://localhost:3000", "http://10.27.254.153:3000"]
     origin = request.headers.get("Origin")
     if origin in allowed_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
@@ -68,6 +69,7 @@ swagger = Swagger(app, template=template, config=config)
 # Registro dos Blueprints com prefixo `/api`
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
+app.register_blueprint(depara_bp, url_prefix="/api/depara")
 app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
