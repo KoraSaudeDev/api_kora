@@ -128,6 +128,120 @@ def generate_slug(name):
 #     except Exception as e:
 #         return jsonify({"status": "error", "message": str(e)}), 500
 
+# @route_bp.route('/create', methods=['POST'])
+# @token_required
+# @permission_required(route_prefix='/routes')
+# def create_route(user_data):
+#     """
+#     Cria uma nova rota, salva no banco e opcionalmente em arquivos, e relaciona com sistemas e conexões.
+#     """
+#     try:
+#         # Obter os dados da requisição
+#         data = request.json
+        
+#         # 🚀 Log da requisição completa para depuração
+#         logging.error(f"📩 Requisição recebida: {json.dumps(data, indent=4)}")
+
+#         name = data.get("name")
+#         query = data.get("query")  # Agora não alteramos os placeholders aqui!
+#         parameters = data.get("parameters", [])
+#         system_ids = data.get("system_id", [])  # Pode ser uma lista ou único ID
+#         connection_ids = data.get("connection_ids", [])
+
+#         # Validar campos obrigatórios
+#         if not name or not query:
+#             return jsonify({"status": "error", "message": "Os campos 'name' e 'query' são obrigatórios."}), 400
+
+#         # Gerar slug para a rota
+#         slug = generate_slug(name)
+
+#         # 🚀 Log dos parâmetros recebidos antes de processamento
+#         logging.error(f"📌 Parâmetros recebidos: {parameters}")
+
+#         # Inicializar `query_path` como None (opcional)
+#         query_path = None
+
+#         # Conectar ao banco de dados
+#         conn = create_db_connection_mysql()
+#         cursor = conn.cursor(dictionary=True)
+
+#         # Inserir a rota na tabela 'routes'
+#         query_insert_route = """
+#             INSERT INTO routes (name, slug, query, query_path, created_at)
+#             VALUES (%s, %s, %s, %s, NOW())
+#         """
+#         cursor.execute(query_insert_route, (name, slug, query, query_path))
+#         route_id = cursor.lastrowid
+
+#         # Relacionar com sistemas na tabela 'route_systems'
+#         if system_ids:
+#             if not isinstance(system_ids, list):
+#                 system_ids = [system_ids]
+#             query_insert_systems = """
+#                 INSERT INTO route_systems (route_id, system_id)
+#                 VALUES (%s, %s)
+#             """
+#             for system_id in system_ids:
+#                 cursor.execute(query_insert_systems, (route_id, system_id))
+
+#         # Relacionar com conexões na tabela 'route_connections'
+#         if connection_ids:
+#             query_insert_connections = """
+#                 INSERT INTO route_connections (route_id, connection_id)
+#                 VALUES (%s, %s)
+#             """
+#             for connection_id in connection_ids:
+#                 cursor.execute(query_insert_connections, (route_id, connection_id))
+
+#         # Inserir parâmetros na tabela 'route_parameters'
+#         if parameters:
+#             query_insert_parameters = """
+#                 INSERT INTO route_parameters (route_id, name, type, value)
+#                 VALUES (%s, %s, %s, %s)
+#             """
+#             for param in parameters:
+#                 param_name = param["name"]
+#                 param_type = param["type"].lower()
+#                 param_value = param["value"]
+
+#                 # 🚀 Log do parâmetro antes da conversão
+#                 logging.error(f"🕵️ Processando parâmetro: {param_name} | Tipo: {param_type} | Valor recebido: {param_value}")
+
+#                 # **🚀 Correção do tipo `datetime-local`**
+#                 if param_type in ["date", "datetime", "datetime-local"]:
+#                     try:
+#                         if param_type == "date":
+#                             param_value = datetime.strptime(param_value, "%Y-%m-%d").strftime("%Y-%m-%d")
+#                         elif param_type == "datetime":
+#                             param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
+#                         elif param_type == "datetime-local":  
+#                             param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
+#                             param_type = "datetime"  # Convertendo para `datetime` que é aceito pelo MySQL
+
+#                         logging.error(f"✅ Parâmetro {param_name} formatado corretamente: {param_value}")
+#                     except ValueError as e:
+#                         logging.error(f"❌ Erro ao converter {param_name}: {param_value} | {str(e)}")
+#                         return jsonify({"status": "error", "message": f"Formato inválido para {param_type}: {param_value}"}), 400
+
+#                 cursor.execute(query_insert_parameters, (route_id, param_name, param_type, param_value))
+
+#         # Confirmar transações no banco de dados
+#         conn.commit()
+#         cursor.close()
+#         conn.close()
+
+#         return jsonify({
+#             "status": "success",
+#             "message": "Rota criada com sucesso.",
+#             "route_id": route_id,
+#             "slug": slug,
+#             "query_path": query_path
+#         }), 201
+
+#     except Exception as e:
+#         logging.error(f"❌ Erro ao criar rota: {e}")
+#         return jsonify({"status": "error", "message": str(e)}), 500
+    
 @route_bp.route('/create', methods=['POST'])
 @token_required
 @permission_required(route_prefix='/routes')
@@ -202,7 +316,7 @@ def create_route(user_data):
             for param in parameters:
                 param_name = param["name"]
                 param_type = param["type"].lower()
-                param_value = param["value"]
+                param_value = param.get("value")
 
                 # 🚀 Log do parâmetro antes da conversão
                 logging.error(f"🕵️ Processando parâmetro: {param_name} | Tipo: {param_type} | Valor recebido: {param_value}")
@@ -210,15 +324,18 @@ def create_route(user_data):
                 # **🚀 Correção do tipo `datetime-local`**
                 if param_type in ["date", "datetime", "datetime-local"]:
                     try:
-                        if param_type == "date":
-                            param_value = datetime.strptime(param_value, "%Y-%m-%d").strftime("%Y-%m-%d")
-                        elif param_type == "datetime":
-                            param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
-                        elif param_type == "datetime-local":  
-                            param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
-                            param_type = "datetime"  # Convertendo para `datetime` que é aceito pelo MySQL
+                        if param_value:  # ✅ Apenas processa se o valor não for None
+                            if param_type == "date":
+                                param_value = datetime.strptime(param_value, "%Y-%m-%d").strftime("%Y-%m-%d")
+                            elif param_type == "datetime":
+                                param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
+                            elif param_type == "datetime-local":  
+                                param_value = datetime.strptime(param_value, "%Y-%m-%dT%H:%M").strftime("%Y-%m-%d %H:%M:%S")
+                                param_type = "datetime"  # Convertendo para `datetime` que é aceito pelo MySQL
 
-                        logging.error(f"✅ Parâmetro {param_name} formatado corretamente: {param_value}")
+                            logging.error(f"✅ Parâmetro {param_name} formatado corretamente: {param_value}")
+                        else:
+                            logging.error(f"⚠️ Parâmetro {param_name} está vazio (None), mantendo valor como NULL.")
                     except ValueError as e:
                         logging.error(f"❌ Erro ao converter {param_name}: {param_value} | {str(e)}")
                         return jsonify({"status": "error", "message": f"Formato inválido para {param_type}: {param_value}"}), 400
@@ -253,7 +370,7 @@ def list_routes(user_data):
     try:
         # Obter parâmetros de paginação
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 10))
+        limit = int(request.args.get("limit", 1000))
         offset = (page - 1) * limit
 
         conn = create_db_connection_mysql()

@@ -39,7 +39,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expor a porta correta
-EXPOSE 3793
+EXPOSE 5000
 
 # Comando para rodar a aplicação
 CMD ["python", "main.py"]
