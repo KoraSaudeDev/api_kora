@@ -7,6 +7,7 @@ from app.services.db_service import DatabaseService
 import logging
 from app.models.connection import Connection
 from app.utils.helpers import generate_slug
+import time
 
 # Definição do Blueprint
 connection_bp = Blueprint('connections', __name__, url_prefix='/connections')
@@ -321,15 +322,46 @@ def edit_connection(user_data, connection_id):
         logging.error(f"Erro ao editar conexão: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# Testar uma conexão existente
+# # Testar uma conexão existente
+# @connection_bp.route("/test/<int:connection_id>", methods=["GET"])
+# @token_required
+# @permission_required(route_prefix="/connections")
+# def test_database_connection(user_data, connection_id):
+#     """
+#     Testa uma conexão existente com base no ID.
+#     """
+#     try:
+#         conn = create_db_connection_mysql()
+#         cursor = conn.cursor(dictionary=True)
+
+#         query = "SELECT * FROM connections WHERE id = %s"
+#         cursor.execute(query, (connection_id,))
+#         connection_data = cursor.fetchone()
+
+#         cursor.close()
+#         conn.close()
+
+#         if not connection_data:
+#             return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
+
+#         result = DatabaseService.test_existing_connection(connection_data)
+#         return jsonify(result), 200 if result["status"] == "success" else 400
+#     except Exception as e:
+#         logging.error(f"Erro ao testar conexão: {e}")
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
 @connection_bp.route("/test/<int:connection_id>", methods=["GET"])
 @token_required
 @permission_required(route_prefix="/connections")
 def test_database_connection(user_data, connection_id):
     """
-    Testa uma conexão existente com base no ID.
+    Testa uma conexão existente com base no ID e retorna logs detalhados.
     """
+    start_time = time.time()  # Marca o tempo inicial
+
     try:
+        logging.info(f"Testando conexão para connection_id: {connection_id}")
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
@@ -341,13 +373,28 @@ def test_database_connection(user_data, connection_id):
         conn.close()
 
         if not connection_data:
+            logging.warning(f"Conexão ID {connection_id} não encontrada.")
             return jsonify({"status": "error", "message": "Conexão não encontrada."}), 404
 
+        logging.info(f"Conexão ID {connection_id} encontrada: {connection_data}")
+
+        # Testa a conexão
         result = DatabaseService.test_existing_connection(connection_data)
-        return jsonify(result), 200 if result["status"] == "success" else 400
+
+        elapsed_time = round(time.time() - start_time, 3)  # Tempo decorrido
+        logging.info(f"Tempo de teste de conexão: {elapsed_time} segundos")
+
+        if result["status"] == "success":
+            logging.info(f"Conexão ID {connection_id} bem-sucedida: {result}")
+            return jsonify({"status": "success", "message": "Conexão realizada com sucesso.", "details": result, "elapsed_time": elapsed_time}), 200
+        else:
+            logging.error(f"Erro na conexão ID {connection_id}: {result}")
+            return jsonify({"status": "error", "message": "Falha ao conectar.", "details": result, "elapsed_time": elapsed_time}), 400
+
     except Exception as e:
-        logging.error(f"Erro ao testar conexão: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        elapsed_time = round(time.time() - start_time, 3)
+        logging.error(f"Erro ao testar conexão ID {connection_id}: {e} - Tempo: {elapsed_time} segundos")
+        return jsonify({"status": "error", "message": str(e), "elapsed_time": elapsed_time}), 500
 
 # Listar conexões
 @connection_bp.route('/list', methods=['GET'])
@@ -359,7 +406,7 @@ def list_connections(user_data):
     """
     try:
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 10))
+        limit = int(request.args.get("limit", 100))
         offset = (page - 1) * limit
 
         conn = create_db_connection_mysql()
