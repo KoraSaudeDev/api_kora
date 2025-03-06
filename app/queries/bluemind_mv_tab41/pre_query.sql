@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM dbamv.FORNEC_DOC_COMPRAS WHERE cd_fornecedor = @cd_fornecedor AND cd_doc_compras = @cd_doc_compras AND dt_validade > SYSDATE

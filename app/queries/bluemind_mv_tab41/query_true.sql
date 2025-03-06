@@ -1,0 +1,1 @@
+UPDATE dbamv.FORNEC_DOC_COMPRAS SET dt_efetivacao = @dt_efetivacao, dt_validade = @dt_validade, status_doc_forn = @status_doc_forn, ds_observacao = @ds_observacao, nr_dias_aviso_vencimento = @nr_dias_aviso_vencimento, ds_documento = @ds_documento WHERE cd_fornecedor = @cd_fornecedor AND cd_doc_compras = @cd_doc_compras AND status_doc_forn != 'Inativo'
