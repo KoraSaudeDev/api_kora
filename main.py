@@ -4,14 +4,30 @@ from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
 from app.controllers.verzo_controller import verzo_bp
 from app.controllers.depara_controller import depara_bp
+from app.controllers.tickets_controller import ticket_bp
 from app.controllers.route_controller import route_bp
 from app.controllers.connection_controller import connection_bp
 from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 # from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
+import logging
+import sys
+from app import create_app
 
-app = Flask(__name__)
+app = create_app()
+
+logging.basicConfig(
+    level=logging.DEBUG,  # Garantir que DEBUG será exibido
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # Redireciona logs para stdout
+    ],
+)
+
+# Configurando logs específicos para Flask
+flask_logger = logging.getLogger('flask.app')
+flask_logger.setLevel(logging.DEBUG)
 
 # Configurando CORS para aceitar requisições do frontend no IP e porta corretos
 CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3200", "http://10.27.254.153:3200","http://localhost:3100", "http://10.27.254.153:3100","http://localhost:3000", "http://10.27.254.153:3000"]}}, supports_credentials=True)
@@ -70,6 +86,7 @@ swagger = Swagger(app, template=template, config=config)
 app.register_blueprint(auth_bp, url_prefix="/api/auth")
 app.register_blueprint(verzo_bp, url_prefix="/api/verzo")
 app.register_blueprint(depara_bp, url_prefix="/api/depara")
+app.register_blueprint(ticket_bp, url_prefix="/api/ticket")
 app.register_blueprint(route_bp, url_prefix="/api/routes")
 app.register_blueprint(connection_bp, url_prefix="/api/connections")
 app.register_blueprint(system_bp, url_prefix="/api/systems")
