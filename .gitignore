@@ -5,3 +5,5 @@ app/routes/__pycache__/*
 app/services/__pycache__/*
 app/utils/__pycache__/*
 .venv
+/instantclient-basic-linux.zip
+instantclient-basic-linux.zip

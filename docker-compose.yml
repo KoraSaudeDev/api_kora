@@ -5,9 +5,12 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "3793:3793"
+      - "5000:5000"
     volumes:
       - .:/app
     environment:
       FLASK_ENV: development
+      LD_LIBRARY_PATH: /opt/oracle/instantclient
+      PATH: "/opt/oracle/instantclient:$PATH"
+      TNS_ADMIN: /opt/oracle/instantclient
     restart: always

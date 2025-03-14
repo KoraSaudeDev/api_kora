@@ -2,7 +2,6 @@ import mysql.connector
 import cx_Oracle
 import psycopg2
 import sqlite3
-import pyodbc
 from sqlalchemy import create_engine
 from hdbcli import dbapi
 import redis
@@ -12,14 +11,9 @@ import json
 import logging
 from app.utils.security import decrypt_password
 import firebase_admin
-from dotenv import load_dotenv
-import os
 
 # Configuração do logger
 logging.basicConfig(level=logging.INFO)
-
-# Carregar variáveis do .env
-load_dotenv()
 
 class DatabaseService:
     @staticmethod
@@ -174,40 +168,3 @@ class DatabaseService:
             )
         except Exception as e:
             return {"status": "error", "message": str(e)}
-
-    @staticmethod
-    def create_connection_itsm_tickets():
-        """
-        Cria uma conexão com o banco ITSM Tickets, configurado no arquivo .env.
-        """
-        db_type = os.getenv("ITSM_DB_TYPE")
-        host = os.getenv("ITSM_DB_HOST")
-        port = int(os.getenv("ITSM_DB_PORT"))
-        user = os.getenv("ITSM_DB_USER")
-        password = os.getenv("ITSM_DB_PASSWORD")
-        database = os.getenv("ITSM_DB_DATABASE")
-        service_name = os.getenv("ITSM_DB_SERVICE_NAME", None)
-        sid = os.getenv("ITSM_DB_SID", None)
-
-        try:
-            if db_type.lower() == "mysql":
-                return mysql.connector.connect(
-                    host=host,
-                    port=port,
-                    user=user,
-                    password=password,
-                    database=database
-                )
-            elif db_type.lower() == "oracle":
-                if service_name:
-                    dsn = cx_Oracle.makedsn(host, port, service_name=service_name)
-                elif sid:
-                    dsn = cx_Oracle.makedsn(host, port, sid=sid)
-                else:
-                    raise ValueError("Oracle requer 'service_name' ou 'sid'.")
-                return cx_Oracle.connect(user=user, password=password, dsn=dsn)
-            else:
-                raise ValueError(f"Tipo de banco '{db_type}' não suportado para ITSM Tickets.")
-        except Exception as e:
-            logging.error(f"Erro ao conectar ao banco ITSM Tickets: {e}")
-            raise ConnectionError(f"Erro ao conectar ao banco ITSM Tickets: {e}")

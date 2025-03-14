@@ -8,6 +8,9 @@ import json
 import logging
 import unidecode
 import re
+import sys
+import traceback
+import cx_Oracle
 from sqlalchemy.sql import text
 from app.utils.db_connections import create_oracle_connection, create_mysql_connection
 from app.utils.security import decrypt_password
@@ -33,67 +36,99 @@ def generate_slug(name):
 @permission_required(route_prefix='/routes')
 def create_route(user_data):
     """
-    Cria uma nova rota, salva no banco e opcionalmente em arquivos, e relaciona com sistemas e conexões.
+    Cria uma nova rota, salvando no banco os dados de query normal, pré-processada e/ou pós-processada,
+    relacionando também com sistemas e conexões.
     """
     try:
         # Obter os dados da requisição
         data = request.json
-        name = data.get("name")
-        query = data.get("query")
-        parameters = data.get("parameters", [])
-        system_ids = data.get("system_id", [])  # Pode ser uma lista ou único ID
-        connection_ids = data.get("connection_ids", [])
+        logging.info(f"Requisição recebida: {json.dumps(data, indent=4)}")
 
-        # Validar campos obrigatórios
-        if not name or not query:
-            return jsonify({"status": "error", "message": "Os campos 'name' e 'query' são obrigatórios."}), 400
+        # Extração dos campos
+        name = data.get("name")
+        system_id = data.get("system_id")
+        connection_ids = data.get("connection_ids", [])
+        pre_query = data.get("pre_query")
+        query_true = data.get("query_true")
+        query_false = data.get("query_false")
+        query = data.get("query")  # Query principal (modo normal/)
+        post_query = data.get("post_query")
+        dml_personalizado = data.get("dml_personalizado")
+        is_pre_processed = data.get("is_pre_processed", False)
+        is_post_processed = data.get("is_post_processed", False)
+        parameters = data.get("parameters", [])
+
+        # Validações: Pelo menos uma query deve existir
+        if not any([query, pre_query, query_true, query_false, post_query, dml_personalizado]):
+            return jsonify({
+                "status": "error",
+                "message": ("Pelo menos uma das queries (query, pre_query, query_true, query_false, " +
+                            "post_query ou dml_personalizado) deve estar preenchida.")
+            }), 400
+
+        # Validação para pré-processamento
+        if is_pre_processed and not any([pre_query, query_true, query_false]):
+            return jsonify({
+                "status": "error",
+                "message": ("Pré-processamento ativado, mas nenhuma query foi fornecida " +
+                            "(pre_query, query_true, query_false).")
+            }), 400
+
+        # Validação para pós-processamento
+        if is_post_processed and not post_query:
+            return jsonify({
+                "status": "error",
+                "message": "Pós-processamento ativado, mas post_query está vazia."
+            }), 400
+
+        # Determinação do tipo de rota (query_type)
+        if is_pre_processed and is_post_processed:
+            query_type = "pré e pós-processada"
+        elif is_pre_processed:
+            query_type = "pré-processada"
+        elif is_post_processed:
+            query_type = "pós-processada"
+        elif query or dml_personalizado:
+            query_type = "normal"
+        else:
+            query_type = "indefinida"
 
         # Gerar slug para a rota
         slug = generate_slug(name)
+        logging.info(f"Gerado slug: {slug} | Tipo de query: {query_type}")
 
-        # Substituir placeholders de parâmetros na query
-        for param in parameters:
-            placeholder = f"@{param['name']}"
-            new_placeholder = f":{param['name']}"
-            query = query.replace(placeholder, new_placeholder)
-
-        # Inicializar `query_path` como None (opcional)
-        query_path = None
-
-        # Salvar a query em um arquivo, se necessário
-        save_query_to_file = data.get("save_query_to_file", False)  # Flag opcional
-        if save_query_to_file:
-            system_folder = os.path.join("app", "queries", slug)
-            if not os.path.exists(system_folder):
-                os.makedirs(system_folder)
-            query_path = os.path.join(system_folder, f"{slug}.sql")
-            with open(query_path, "w", encoding="utf-8") as file:
-                file.write(query)
-
-        # Conectar ao banco de dados
+        # Conectar ao banco de dados MySQL
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
         # Inserir a rota na tabela 'routes'
         query_insert_route = """
-            INSERT INTO routes (name, slug, query, query_path, created_at)
-            VALUES (%s, %s, %s, %s, NOW())
+            INSERT INTO routes 
+                (name, slug, system_id, query, pre_query, query_true, query_false, post_query, 
+                 dml_personalizado, is_pre_processed, is_post_processed, query_path, created_at)
+            VALUES 
+                (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """
-        cursor.execute(query_insert_route, (name, slug, query, query_path))
+        # Aqui, query_path é definido como NULL (pode ser usado futuramente)
+        cursor.execute(query_insert_route, (
+            name, slug, system_id, query, pre_query, query_true, query_false, post_query,
+            dml_personalizado, is_pre_processed, is_post_processed, None
+        ))
         route_id = cursor.lastrowid
 
-        # Relacionar com sistemas na tabela 'route_systems'
-        if system_ids:
-            if not isinstance(system_ids, list):
-                system_ids = [system_ids]
-            query_insert_systems = """
-                INSERT INTO route_systems (route_id, system_id)
-                VALUES (%s, %s)
+        # Inserir os parâmetros na tabela 'route_parameters', se houver
+        if parameters:
+            query_insert_parameters = """
+                INSERT INTO route_parameters (route_id, name, type)
+                VALUES (%s, %s, %s)
             """
-            for system_id in system_ids:
-                cursor.execute(query_insert_systems, (route_id, system_id))
+            for param in parameters:
+                param_name = param.get("name")
+                param_type = param.get("type", "").lower()
+                logging.info(f"Processando parâmetro: {param_name} | Tipo: {param_type}")
+                cursor.execute(query_insert_parameters, (route_id, param_name, param_type))
 
-        # Relacionar com conexões na tabela 'route_connections'
+        # Relacionar a rota com as conexões na tabela 'route_connections'
         if connection_ids:
             query_insert_connections = """
                 INSERT INTO route_connections (route_id, connection_id)
@@ -102,16 +137,7 @@ def create_route(user_data):
             for connection_id in connection_ids:
                 cursor.execute(query_insert_connections, (route_id, connection_id))
 
-        # Inserir parâmetros na tabela 'route_parameters'
-        if parameters:
-            query_insert_parameters = """
-                INSERT INTO route_parameters (route_id, name, type, value)
-                VALUES (%s, %s, %s, %s)
-            """
-            for param in parameters:
-                cursor.execute(query_insert_parameters, (route_id, param['name'], param['type'], param['value']))
-
-        # Confirmar transações no banco de dados
+        # Efetuar o commit e fechar a conexão
         conn.commit()
         cursor.close()
         conn.close()
@@ -120,12 +146,13 @@ def create_route(user_data):
             "status": "success",
             "message": "Rota criada com sucesso.",
             "route_id": route_id,
-            "slug": slug,
-            "query_path": query_path
+            "query_type": query_type
         }), 201
 
     except Exception as e:
+        logging.error(f"❌ Erro ao processar query: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
@@ -138,7 +165,7 @@ def list_routes(user_data):
     try:
         # Obter parâmetros de paginação
         page = int(request.args.get("page", 1))
-        limit = int(request.args.get("limit", 10))
+        limit = int(request.args.get("limit", 1000))
         offset = (page - 1) * limit
 
         conn = create_db_connection_mysql()
@@ -365,9 +392,19 @@ def edit_route(user_data, route_id):
             cursor.execute("DELETE FROM route_parameters WHERE route_id = %s", (route_id,))
             parameters = data["parameters"]
             for param in parameters:
+                param_name = param["name"]
+                param_type = param["type"].lower()
+                param_value = param["value"]
+
+                # **🚀 Novo Tratamento para `DATE` e `DATETIME`**
+                if param_type == "date":
+                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d')"  # MySQL
+                elif param_type == "datetime":
+                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d %H:%i:%s')"  # MySQL
+
                 cursor.execute(
                     "INSERT INTO route_parameters (route_id, name, type, value) VALUES (%s, %s, %s, %s)",
-                    (route_id, param["name"], param["type"], param["value"])
+                    (route_id, param_name, param_type, param_value)
                 )
 
         conn.commit()
@@ -450,128 +487,569 @@ def get_route_details(user_data, route_id):
         logging.error(f"Erro ao buscar detalhes da rota: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
+def remove_quoted_strings(sql: str) -> str:
+    """
+    Remove tudo que está entre aspas simples em uma instrução SQL,
+    para que 'HH24:MI:SS' não gere :MI, :SS como falsas bind vars.
+    """
+    return re.sub(r"'[^']*'", '', sql)
+
+#sem a restrição no update
+# @route_bp.route('/execute/<slug>', methods=['POST'])
+# @token_required
+# @permission_required(route_prefix='/routes/execute')
+# def execute_route_query(user_data, slug):
+#     try:
+#         logging.error(f"🔹 [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
+#         sys.stdout.flush()
+
+#         request_data = request.json or {}
+#         logging.error(f"📥 Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
+#         sys.stdout.flush()
+
+#         provided_connections = request_data.get("connections", [])
+#         provided_parameters_list = request_data.get("parameters", [])
+#         provided_parameters = {}
+#         for param_entry in provided_parameters_list:
+#             for connection_name, params in param_entry.items():
+#                 provided_parameters[connection_name] = params
+
+#         # 1) Carrega rota do MySQL
+#         conn = create_db_connection_mysql()
+#         cursor = conn.cursor(dictionary=True)
+#         query_route = """
+#             SELECT 
+#                 r.id,
+#                 r.pre_query,
+#                 r.query_true,
+#                 r.query_false,
+#                 r.post_query,
+#                 r.is_pre_processed,
+#                 r.is_post_processed,
+#                 r.query
+#             FROM routes r
+#             WHERE r.slug = %s
+#         """
+#         cursor.execute(query_route, (slug,))
+#         route = cursor.fetchone()
+#         cursor.close()
+#         conn.close()
+
+#         if not route:
+#             return jsonify({"status": "error", "message": f"❌ Rota não encontrada para o slug: {slug}"}), 404
+
+#         pre_query = route['pre_query']
+#         query_true = route['query_true']
+#         query_false = route['query_false']
+#         post_query = route['post_query']
+#         is_pre_processed = route['is_pre_processed']
+#         is_post_processed = route['is_post_processed']
+#         query_legacy = route['query']
+
+#         logging.error(f"📝 Queries carregadas: pre={pre_query}, true={query_true}, false={query_false}, post={post_query}, legacy={query_legacy}")
+#         sys.stdout.flush()
+
+#         # 2) Carrega conexões associadas
+#         conn = create_db_connection_mysql()
+#         cursor = conn.cursor(dictionary=True)
+#         query_connections = """
+#             SELECT c.id, c.name, c.slug, c.db_type, c.host, c.port, c.username,
+#                    c.password, c.database_name, c.service_name, c.sid
+#             FROM connections c
+#             JOIN route_connections rc ON c.id = rc.connection_id
+#             WHERE rc.route_id = %s
+#         """
+#         cursor.execute(query_connections, (route['id'],))
+#         connections = cursor.fetchall()
+#         cursor.close()
+#         conn.close()
+
+#         if not connections:
+#             return jsonify({"status": "error", "message": "❌ Nenhuma conexão válida encontrada no banco de dados."}), 404
+
+#         results = {}
+#         executed_any_query = False
+#         last_error = None
+
+#         logging.error("🔎 Modo de execução: LEGACY")
+#         sys.stdout.flush()
+
+#         # Variáveis para armazenar os textos executados (após conversão)
+#         executed_query_str = ""
+#         executed_post_query_str = ""
+#         query_parameters = {}  # Para armazenar os parâmetros usados na query principal
+#         post_query_parameters = {}  # Para os da post_query
+
+#         # 3) Percorre conexões e executa queries
+#         for connection in connections:
+#             db_slug = connection['slug'].strip().lower()
+#             if db_slug not in [c.strip().lower() for c in provided_connections]:
+#                 continue
+
+#             logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
+#             sys.stdout.flush()
+
+#             try:
+#                 password = decrypt_password(connection['password'])
+#                 db_conn = create_oracle_connection(
+#                     host=connection['host'],
+#                     port=connection['port'],
+#                     user=connection['username'],
+#                     password=password,
+#                     service_name=connection.get('service_name'),
+#                     sid=connection.get('sid')
+#                 ) if connection['db_type'] == 'oracle' else None
+
+#                 if not db_conn:
+#                     results[db_slug] = f"⚠️ Não foi possível criar conexão p/ {db_slug}."
+#                     continue
+
+#                 db_cursor = db_conn.cursor()
+
+#                 if db_slug not in provided_parameters:
+#                     error_msg = f"⚠️ Nenhum parâmetro enviado para {db_slug}."
+#                     logging.error(error_msg)
+#                     sys.stdout.flush()
+#                     results[db_slug] = error_msg
+#                     db_cursor.close()
+#                     continue
+
+#                 user_param_dict = provided_parameters[db_slug]
+#                 logging.error(f"🔍 [{db_slug}] Parâmetros recebidos:\n{json.dumps(user_param_dict, indent=4)}")
+#                 sys.stdout.flush()
+
+#                 final_params = {k.lower(): v for k, v in user_param_dict.items()}
+#                 logging.error(f"Chaves em final_params: {list(final_params.keys())}")
+
+#                 # Executa a query principal (coluna 'query')
+#                 main_query = query_legacy
+#                 if main_query:
+#                     main_query_filtered = re.sub(r"@(\w+)", r":\1", main_query)
+#                     found_vars = re.findall(r':(\w+)', main_query_filtered)
+#                     query_parameters = {var: final_params.get(var.lower(), None) for var in found_vars}
+
+#                     logging.error(f"🔥 [ORACLE] Query principal para {db_slug}:\n{main_query_filtered}")
+#                     logging.error(f"🔍 [DEBUG] Parâmetros da query principal:\n{json.dumps(query_parameters, indent=4)}")
+#                     db_cursor.execute(main_query_filtered, query_parameters)
+#                     db_conn.commit()
+
+#                     executed_any_query = True
+#                     executed_query_str = main_query_filtered
+#                     msg = "Query executada com sucesso (legacy)."
+#                     logging.error(f"✅ Query legacy executada para {db_slug}.")
+#                 else:
+#                     msg = "Query legacy não definida."
+#                     results[db_slug] = msg
+#                     db_cursor.close()
+#                     continue
+
+#                 # Executa a post_query se o flag is_post_processed estiver ativo e se post_query estiver definida
+#                 if is_post_processed and post_query and post_query.strip():
+#                     try:
+#                         logging.error(f"🔥 [ORACLE] Iniciando execução da post_query para {db_slug}:\n{post_query}")
+#                         post_query_filtered = re.sub(r"@(\w+)", r":\1", post_query)
+#                         found_post_vars = re.findall(r':(\w+)', post_query_filtered)
+#                         post_query_parameters = {var: final_params.get(var.lower(), None) for var in found_post_vars}
+#                         logging.error(f"🔍 [DEBUG] Parâmetros da post_query:\n{json.dumps(post_query_parameters, indent=4)}")
+#                         db_cursor.execute(post_query_filtered, post_query_parameters)
+#                         db_conn.commit()
+#                         executed_post_query_str = post_query_filtered
+#                         logging.error(f"✅ Post_query executada com sucesso para {db_slug}. Rowcount: {db_cursor.rowcount}")
+#                         msg += " Post-query executada com sucesso."
+#                     except Exception as post_e:
+#                         logging.exception(f"❌ Erro na post-query em {db_slug}: {post_e}")
+#                         msg += f" Erro na post-query: {str(post_e)}"
+#                 else:
+#                     logging.error(f"Não há post_query para executar em {db_slug} ou flag is_post_processed é falso.")
+
+#                 db_cursor.close()
+#                 results[db_slug] = {
+#                     "message": msg,
+#                     "executed_query": executed_query_str,
+#                     "query_parameters": query_parameters,
+#                     "executed_post_query": executed_post_query_str,
+#                     "post_query_parameters": post_query_parameters if post_query and post_query.strip() else {}
+#                 }
+
+#             except Exception as e:
+#                 error_message = str(e)
+#                 last_error = error_message
+#                 logging.error(f"❌ Erro ao executar query em {db_slug}: {error_message}")
+#                 logging.error(traceback.format_exc())
+#                 sys.stdout.flush()
+#                 results[db_slug] = error_message
+
+#         logging.error(f"🔎 Resultados finais: {results}")
+#         if not executed_any_query:
+#             return jsonify({
+#                 "status": "error",
+#                 "message": "Nenhuma query foi executada.",
+#                 "last_error": last_error,
+#                 "data": results
+#             }), 400
+
+#         return jsonify({"status": "success", "data": results}), 200
+
+#     except Exception as e:
+#         logging.error(f"❌ Erro inesperado durante a execução: {str(e)}")
+#         logging.error(traceback.format_exc())
+#         return jsonify({"status": "error", "message": str(e)}), 500
+
 @route_bp.route('/execute/<slug>', methods=['POST'])
 @token_required
 @permission_required(route_prefix='/routes/execute')
 def execute_route_query(user_data, slug):
-    """
-    Executa a query associada a uma rota com base no slug fornecido.
-    """
     try:
-        # Obter parâmetros enviados pelo usuário
-        request_data = request.json or {}
-        provided_parameters = {
-            param['name']: param['value'] for param in request_data.get("parameters", [])
-        }
-        provided_connections = request_data.get("connections", [])
+        logging.error(f"🔹 [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
+        sys.stdout.flush()
 
-        # Conectar ao banco principal
+        request_data = request.json or {}
+        logging.error(f"📥 Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
+        sys.stdout.flush()
+
+        provided_connections = request_data.get("connections", [])
+        provided_parameters_list = request_data.get("parameters", [])
+        provided_parameters = {}
+        for param_entry in provided_parameters_list:
+            for connection_name, params in param_entry.items():
+                provided_parameters[connection_name] = params
+
+        # 1) Carrega rota do MySQL
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
-
-        # Buscar informações da rota
         query_route = """
-            SELECT r.id, r.query
+            SELECT 
+                r.id,
+                r.pre_query,
+                r.query_true,
+                r.query_false,
+                r.post_query,
+                r.is_pre_processed,
+                r.is_post_processed,
+                r.query
             FROM routes r
             WHERE r.slug = %s
         """
         cursor.execute(query_route, (slug,))
         route = cursor.fetchone()
-
-        if not route:
-            return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
-
-        # Buscar parâmetros da rota, caso não sejam fornecidos
-        query_parameters = """
-            SELECT name, type, value
-            FROM route_parameters
-            WHERE route_id = %s
-        """
-        cursor.execute(query_parameters, (route['id'],))
-        route_parameters = cursor.fetchall()
-
-        # Preencher parâmetros com valores padrão, caso não sejam fornecidos
-        for param in route_parameters:
-            if param['name'] not in provided_parameters:
-                provided_parameters[param['name']] = param['value']
-
-        # Substituir parâmetros diretamente na query
-        query = route['query']
-        for param in route_parameters:
-            param_name = param['name']
-            param_value = provided_parameters.get(param_name, param['value'])
-            query = query.replace(f":{param_name}", f"'{param_value}'")
-
-        # Buscar conexões associadas, caso não sejam fornecidas
-        if not provided_connections:
-            query_connections = """
-                SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.password, c.database_name, c.service_name, c.sid
-                FROM connections c
-                JOIN route_connections rc ON c.id = rc.connection_id
-                WHERE rc.route_id = %s
-            """
-            cursor.execute(query_connections, (route['id'],))
-            connections = cursor.fetchall()
-        else:
-            query_connections = """
-                SELECT id, name, db_type, host, port, username, password, database_name, service_name, sid
-                FROM connections
-                WHERE slug IN (%s)
-            """ % ', '.join(['%s'] * len(provided_connections))
-            cursor.execute(query_connections, tuple(provided_connections))
-            connections = cursor.fetchall()
-
-        if not connections:
-            return jsonify({"status": "error", "message": "Nenhuma conexão válida encontrada."}), 404
-
-        results = {}
-        for connection in connections:
-            try:
-                # Conectar ao banco específico
-                password = decrypt_password(connection['password'])
-
-                if connection['db_type'] == 'mysql':
-                    db_conn = create_mysql_connection(
-                        host=connection['host'],
-                        port=connection['port'],
-                        user=connection['username'],
-                        password=password,
-                        database_name=connection['database_name']
-                    )
-                    db_cursor = db_conn.cursor(dictionary=True)
-                elif connection['db_type'] == 'oracle':
-                    db_conn = create_oracle_connection(
-                        host=connection['host'],
-                        port=connection['port'],
-                        user=connection['username'],
-                        password=password,
-                        service_name=connection.get('service_name'),
-                        sid=connection.get('sid')
-                    )
-                    db_cursor = db_conn.cursor()
-                else:
-                    results[connection['name']] = "Tipo de banco desconhecido."
-                    continue
-
-                # Executar a query
-                db_cursor.execute(query)
-                rows = db_cursor.fetchall()
-                columns = [col[0] for col in db_cursor.description]
-                results[connection['name']] = [dict(zip(columns, row)) for row in rows]
-                db_cursor.close()
-
-            except Exception as e:
-                results[connection['name']] = str(e)
-
         cursor.close()
         conn.close()
 
-        return jsonify({
-            "status": "success",
-            "data": results
-        }), 200
+        if not route:
+            return jsonify({"status": "error", "message": f"❌ Rota não encontrada para o slug: {slug}"}), 404
+
+        pre_query = route['pre_query']
+        query_true = route['query_true']
+        query_false = route['query_false']
+        post_query = route['post_query']
+        is_pre_processed = route['is_pre_processed']
+        is_post_processed = route['is_post_processed']
+        query_legacy = route['query']
+
+        logging.error(f"📝 Queries carregadas: pre={pre_query}, true={query_true}, false={query_false}, post={post_query}, legacy={query_legacy}")
+        sys.stdout.flush()
+
+        # 2) Carrega conexões associadas
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+        query_connections = """
+            SELECT DISTINCT c.id, c.name, c.slug, c.db_type, c.host, c.port, c.username,
+                   c.password, c.database_name, c.service_name, c.sid
+            FROM connections c
+            JOIN route_connections rc ON c.id = rc.connection_id
+            WHERE rc.route_id = %s
+        """
+        cursor.execute(query_connections, (route['id'],))
+        connections = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        # Opcional: Filtrar duplicatas (caso a query não trate)
+        unique_connections = {}
+        for conn_entry in connections:
+            slug_lower = conn_entry['slug'].strip().lower()
+            if slug_lower not in unique_connections:
+                unique_connections[slug_lower] = conn_entry
+        connections = list(unique_connections.values())
+
+        if not connections:
+            return jsonify({"status": "error", "message": "❌ Nenhuma conexão válida encontrada no banco de dados."}), 404
+
+        results = {}
+        executed_any_query = False
+        last_error = None
+
+        logging.error("🔎 Modo de execução: LEGACY")
+        sys.stdout.flush()
+
+        # Variáveis para armazenar os textos executados (após conversão)
+        executed_query_str = ""
+        executed_post_query_str = ""
+        query_parameters = {}      # Parâmetros usados na query principal
+        post_query_parameters = {} # Parâmetros da post_query
+
+        # 3) Percorre conexões e executa queries
+        for connection in connections:
+            db_slug = connection['slug'].strip().lower()
+            if db_slug not in [c.strip().lower() for c in provided_connections]:
+                continue
+
+            logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
+            sys.stdout.flush()
+
+            try:
+                password = decrypt_password(connection['password'])
+                db_conn = create_oracle_connection(
+                    host=connection['host'],
+                    port=connection['port'],
+                    user=connection['username'],
+                    password=password,
+                    service_name=connection.get('service_name'),
+                    sid=connection.get('sid')
+                ) if connection['db_type'] == 'oracle' else None
+
+                if not db_conn:
+                    results[db_slug] = f"⚠️ Não foi possível criar conexão p/ {db_slug}."
+                    continue
+
+                db_cursor = db_conn.cursor()
+
+                if db_slug not in provided_parameters:
+                    error_msg = f"⚠️ Nenhum parâmetro enviado para {db_slug}."
+                    logging.error(error_msg)
+                    sys.stdout.flush()
+                    results[db_slug] = error_msg
+                    db_cursor.close()
+                    continue
+
+                user_param_dict = provided_parameters[db_slug]
+                logging.error(f"🔍 [{db_slug}] Parâmetros recebidos:\n{json.dumps(user_param_dict, indent=4)}")
+                sys.stdout.flush()
+
+                final_params = {k.lower(): v for k, v in user_param_dict.items()}
+                logging.error(f"Chaves em final_params: {list(final_params.keys())}")
+
+                # Executa a query principal (coluna 'query')
+                main_query = query_legacy
+                if main_query:
+                    main_query_filtered = re.sub(r"@(\w+)", r":\1", main_query)
+                    found_vars = re.findall(r':(\w+)', main_query_filtered)
+                    query_parameters = {var: final_params.get(var.lower(), None) for var in found_vars}
+
+                    # Validação para queries UPDATE
+                    if main_query_filtered.lower().strip().startswith("update"):
+                        # Verifica se existe a cláusula WHERE
+                        if "where" not in main_query_filtered.lower():
+                            error_msg = "ERRO: query update deve conter cláusula WHERE."
+                            logging.error(error_msg)
+                            results[db_slug] = error_msg
+                            db_cursor.close()
+                            continue
+                        else:
+                            # Extrai a parte do WHERE para verificar os parâmetros
+                            where_clause = main_query_filtered.lower().split("where", 1)[1]
+                            where_params = re.findall(r':(\w+)', where_clause)
+                            valid_param_found = False
+                            for param in where_params:
+                                value = query_parameters.get(param)
+                                if value is not None and (not isinstance(value, str) or value.strip() != ""):
+                                    valid_param_found = True
+                                    break
+                            if not valid_param_found:
+                                error_msg = "ERRO: query update com WHERE deve ter ao menos 1 parâmetro válido (não nulo ou vazio)."
+                                logging.error(error_msg)
+                                results[db_slug] = error_msg
+                                db_cursor.close()
+                                continue
+
+                    logging.error(f"🔥 [ORACLE] Query principal para {db_slug}:\n{main_query_filtered}")
+                    logging.error(f"🔍 [DEBUG] Parâmetros da query principal:\n{json.dumps(query_parameters, indent=4)}")
+                    db_cursor.execute(main_query_filtered, query_parameters)
+                    db_conn.commit()
+
+                    executed_any_query = True
+                    executed_query_str = main_query_filtered
+                    msg = "Query executada com sucesso (legacy)."
+                    logging.error(f"✅ Query legacy executada para {db_slug}.")
+                else:
+                    msg = "Query legacy não definida."
+                    results[db_slug] = msg
+                    db_cursor.close()
+                    continue
+
+                # Executa a post_query se o flag is_post_processed estiver ativo e se post_query estiver definida
+                if is_post_processed and post_query and post_query.strip():
+                    try:
+                        logging.error(f"🔥 [ORACLE] Iniciando execução da post_query para {db_slug}:\n{post_query}")
+                        post_query_filtered = re.sub(r"@(\w+)", r":\1", post_query)
+                        found_post_vars = re.findall(r':(\w+)', post_query_filtered)
+                        post_query_parameters = {var: final_params.get(var.lower(), None) for var in found_post_vars}
+                        logging.error(f"🔍 [DEBUG] Parâmetros da post_query:\n{json.dumps(post_query_parameters, indent=4)}")
+                        db_cursor.execute(post_query_filtered, post_query_parameters)
+                        db_conn.commit()
+                        executed_post_query_str = post_query_filtered
+                        logging.error(f"✅ Post_query executada com sucesso para {db_slug}. Rowcount: {db_cursor.rowcount}")
+                        msg += " Post-query executada com sucesso."
+                    except Exception as post_e:
+                        logging.exception(f"❌ Erro na post-query em {db_slug}: {post_e}")
+                        msg += f" Erro na post-query: {str(post_e)}"
+                else:
+                    logging.error(f"Não há post_query para executar em {db_slug} ou flag is_post_processed é falso.")
+
+                db_cursor.close()
+                results[db_slug] = {
+                    "message": msg,
+                    "executed_query": executed_query_str,
+                    "query_parameters": query_parameters,
+                    "executed_post_query": executed_post_query_str,
+                    "post_query_parameters": post_query_parameters if post_query and post_query.strip() else {}
+                }
+
+            except Exception as e:
+                error_message = str(e)
+                last_error = error_message
+                logging.error(f"❌ Erro ao executar query em {db_slug}: {error_message}")
+                logging.error(traceback.format_exc())
+                sys.stdout.flush()
+                results[db_slug] = error_message
+
+        logging.error(f"🔎 Resultados finais: {results}")
+        if not executed_any_query:
+            return jsonify({
+                "status": "error",
+                "message": "Nenhuma query foi executada.",
+                "last_error": last_error,
+                "data": results
+            }), 400
+
+        return jsonify({"status": "success", "data": results}), 200
 
     except Exception as e:
+        logging.error(f"❌ Erro inesperado durante a execução: {str(e)}")
+        logging.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@route_bp.route('/bluemind/sequence/', methods=['POST'])
+@token_required
+@permission_required(route_prefix='/routes')
+def get_sequence_nextval(user_data):
+    try:
+        logging.error("🔹 [INICIANDO EXECUÇÃO] - Obtendo NEXTVAL da sequência")
+        sys.stdout.flush()
+
+        request_data = request.json or {}
+        logging.error(f"📥 Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
+        sys.stdout.flush()
+
+        provided_connections = request_data.get("connections", [])
+        provided_parameters_list = request_data.get("parameters", [])
+
+        provided_parameters = {}
+        for param_entry in provided_parameters_list:
+            for connection_name, params in param_entry.items():
+                provided_parameters[connection_name] = params
+
+        # Criar conexão com MySQL para buscar credenciais das conexões Oracle
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+
+        query_connections = """
+            SELECT c.slug, c.db_type, c.host, c.port, c.username, c.password, c.service_name, c.sid
+            FROM connections c
+            WHERE c.slug IN (%s)
+        """ % (",".join(["%s"] * len(provided_connections)))
+
+        cursor.execute(query_connections, tuple(provided_connections))
+        connections = {conn["slug"]: conn for conn in cursor.fetchall()}
+        cursor.close()
+        conn.close()
+
+        if not connections:
+            return jsonify({"status": "error", "message": "❌ Nenhuma conexão válida encontrada no banco de dados."}), 404
+
+        results = {}
+        executed_any_query = False
+        last_error = None
+
+        # Percorre conexões e executa queries
+        for db_slug, user_param_dict in provided_parameters.items():
+            db_slug_lower = db_slug.strip().lower()
+            if db_slug_lower not in connections:
+                continue
+
+            logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
+            sys.stdout.flush()
+
+            try:
+                # Obter detalhes da conexão
+                conn_details = connections[db_slug_lower]
+                if conn_details["db_type"].lower() != "oracle":
+                    results[db_slug] = f"⚠️ Conexão {db_slug} não é um banco Oracle."
+                    continue
+
+                password = decrypt_password(conn_details["password"])
+                db_conn = create_oracle_connection(
+                    host=conn_details["host"],
+                    port=conn_details["port"],
+                    user=conn_details["username"],
+                    password=password,
+                    service_name=conn_details.get("service_name"),
+                    sid=conn_details.get("sid")
+                )
+
+                if not db_conn:
+                    results[db_slug] = f"⚠️ Não foi possível criar conexão para {db_slug}."
+                    continue
+
+                db_cursor = db_conn.cursor()
+
+                # Obtendo o nome da sequência
+                sequence_name = user_param_dict.get("sequence")
+                if not sequence_name:
+                    results[db_slug] = "⚠️ Nenhuma sequência informada."
+                    db_cursor.close()
+                    continue
+
+                logging.error(f"🔍 [{db_slug}] Obtendo NEXTVAL de {sequence_name}")
+
+                # Montando a query dinâmica
+                query = f"SELECT {sequence_name}.NEXTVAL AS id_sequence_utilizada FROM DUAL"
+                logging.error(f"🔥 [ORACLE] Query final:\n{query}")
+                sys.stdout.flush()
+
+                # Executando a query
+                db_cursor.execute(query)
+                result = db_cursor.fetchone()
+
+                # Fechando conexão
+                db_cursor.close()
+                db_conn.close()
+
+                if result:
+                    results[db_slug] = {
+                        "message": "NEXTVAL obtido com sucesso",
+                        "id_sequence_utilizada": result[0]
+                    }
+                    executed_any_query = True
+                else:
+                    results[db_slug] = "⚠️ Nenhum valor retornado."
+
+            except Exception as e:
+                last_error = str(e)
+                logging.error(f"❌ Erro ao obter NEXTVAL em {db_slug}: {last_error}")
+                results[db_slug] = last_error
+
+        return jsonify({
+            "status": "success" if executed_any_query else "error",
+            "message": "Nenhuma query foi executada." if not executed_any_query else "NEXTVAL obtido com sucesso",
+            "last_error": last_error,
+            "data": results
+        }), 400 if not executed_any_query else 200
+
+    except Exception as e:
+        logging.error(f"❌ Erro inesperado: {str(e)}")
+        logging.error(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
 
 def validate_executor_parameters_with_user_input(executor_id, user_parameters):
@@ -638,5 +1116,4 @@ def validate_executor_parameters_with_user_input(executor_id, user_parameters):
             "is_valid": False,
             "error": f"Erro ao validar parâmetros: {e}"
         }]
-        
         
