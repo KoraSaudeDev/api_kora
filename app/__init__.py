@@ -20,11 +20,4 @@ def create_app():
     # Inicializar SQLAlchemy com a aplicação
     db.init_app(app)
 
-    # Registrar blueprints
-    from app.controllers.tickets_controller import tickets_bp  # Rota de tickets
-    from app.controllers.tickets_update_controller import tickets_update_bp  # Rota de tickets-update
-    
-    app.register_blueprint(tickets_bp)  # Rota de tickets
-    app.register_blueprint(tickets_update_bp)  # Rota de tickets-update
-
     return app
