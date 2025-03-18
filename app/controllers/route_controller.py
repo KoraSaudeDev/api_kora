@@ -563,7 +563,7 @@ def execute_route_query(user_data, slug):
         cursor.close()
         conn.close()
 
-        # Opcional: Filtrar duplicatas (caso a query não trate)
+        # Filtrar duplicatas (caso haja)
         unique_connections = {}
         for conn_entry in connections:
             slug_lower = conn_entry['slug'].strip().lower()
@@ -633,7 +633,8 @@ def execute_route_query(user_data, slug):
                 if main_query:
                     main_query_filtered = re.sub(r"@(\w+)", r":\1", main_query)
                     found_vars = re.findall(r':(\w+)', main_query_filtered)
-                    query_parameters = {var: final_params.get(var.lower(), None) for var in found_vars}
+                    # Constrói o dicionário de parâmetros com chaves minúsculas
+                    query_parameters = {var.lower(): final_params.get(var.lower(), None) for var in found_vars}
 
                     # Validação para queries UPDATE
                     if main_query_filtered.lower().strip().startswith("update"):
@@ -682,7 +683,7 @@ def execute_route_query(user_data, slug):
                         logging.error(f"🔥 [ORACLE] Iniciando execução da post_query para {db_slug}:\n{post_query}")
                         post_query_filtered = re.sub(r"@(\w+)", r":\1", post_query)
                         found_post_vars = re.findall(r':(\w+)', post_query_filtered)
-                        post_query_parameters = {var: final_params.get(var.lower(), None) for var in found_post_vars}
+                        post_query_parameters = {var.lower(): final_params.get(var.lower(), None) for var in found_post_vars}
                         logging.error(f"🔍 [DEBUG] Parâmetros da post_query:\n{json.dumps(post_query_parameters, indent=4)}")
                         db_cursor.execute(post_query_filtered, post_query_parameters)
                         db_conn.commit()
