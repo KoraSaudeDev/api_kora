@@ -141,10 +141,16 @@ def query_by_type(user_data, route_type, database, query_name):
         conn.close()
 
         # Carrega o JSON completo (incluindo o campo "ROWNUM")
+        # processed_rows = [
+        #     json.loads(row["data"]) for row in rows if "data" in row
+        # ]
+        # return jsonify(processed_rows), 200
+
         processed_rows = [
-            json.loads(row["data"]) for row in rows if "data" in row
+            {k: v for k, v in json.loads(row["data"]).items() if k.upper() != "ROWNUM"}
+            for row in rows if "data" in row
         ]
         return jsonify(processed_rows), 200
-
+    
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
