@@ -51,7 +51,7 @@ def create_route(user_data):
         pre_query = data.get("pre_query")
         query_true = data.get("query_true")
         query_false = data.get("query_false")
-        query = data.get("query")  # Query principal (modo normal/)
+        query = data.get("query")  # Query principal
         post_query = data.get("post_query")
         dml_personalizado = data.get("dml_personalizado")
         is_pre_processed = data.get("is_pre_processed", False)
@@ -119,14 +119,15 @@ def create_route(user_data):
         # Inserir os parâmetros na tabela 'route_parameters', se houver
         if parameters:
             query_insert_parameters = """
-                INSERT INTO route_parameters (route_id, name, type)
-                VALUES (%s, %s, %s)
+                INSERT INTO route_parameters (route_id, name, type, value)
+                VALUES (%s, %s, %s, %s)
             """
             for param in parameters:
                 param_name = param.get("name")
                 param_type = param.get("type", "").lower()
-                logging.info(f"Processando parâmetro: {param_name} | Tipo: {param_type}")
-                cursor.execute(query_insert_parameters, (route_id, param_name, param_type))
+                param_value = param.get("value", "")  # Agora capturamos o value corretamente
+                logging.info(f"Processando parâmetro: {param_name} | Tipo: {param_type} | Valor: {param_value}")
+                cursor.execute(query_insert_parameters, (route_id, param_name, param_type, param_value))
 
         # Relacionar a rota com as conexões na tabela 'route_connections'
         if connection_ids:
@@ -152,7 +153,6 @@ def create_route(user_data):
     except Exception as e:
         logging.error(f"❌ Erro ao processar query: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
@@ -427,9 +427,9 @@ def get_route_details(user_data, route_id):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar os detalhes da rota
+        # Buscar os detalhes da rota, incluindo post_query
         query_route = """
-            SELECT id, name, slug, query, description
+            SELECT id, name, slug, query, description, post_query, system_id
             FROM routes
             WHERE id = %s
         """
@@ -450,6 +450,11 @@ def get_route_details(user_data, route_id):
         cursor.execute(query_parameters, (route_id,))
         parameters = cursor.fetchall()
 
+        # Corrigir se algum value vier nulo
+        for param in parameters:
+            if param["value"] is None:
+                param["value"] = ""
+
         # Buscar as conexões associadas à rota
         query_connections = """
             SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.database_name, c.slug
@@ -460,7 +465,7 @@ def get_route_details(user_data, route_id):
         cursor.execute(query_connections, (route_id,))
         connections = cursor.fetchall()
 
-        # Buscar os sistemas associados à rota
+        # Buscar os sistemas associados (primeiro pela tabela route_systems)
         query_systems = """
             SELECT s.id, s.name, s.slug
             FROM systems s
@@ -469,6 +474,18 @@ def get_route_details(user_data, route_id):
         """
         cursor.execute(query_systems, (route_id,))
         systems = cursor.fetchall()
+
+        # Se não encontrar sistemas relacionados, buscar pelo system_id da tabela routes
+        if not systems and route.get("system_id"):
+            query_system_direct = """
+                SELECT id, name, slug
+                FROM systems
+                WHERE id = %s
+            """
+            cursor.execute(query_system_direct, (route["system_id"],))
+            system = cursor.fetchone()
+            if system:
+                systems = [system]
 
         cursor.close()
         conn.close()

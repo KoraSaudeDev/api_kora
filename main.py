@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, g
 from flasgger import Swagger
 from flask_cors import CORS
 from app.controllers.auth_controller import auth_bp
@@ -14,6 +14,8 @@ from app.controllers.access_controller import access_bp
 import logging
 import sys
 from app import create_app
+from datetime import datetime
+from app.config.db_config import create_db_connection_mysql
 
 app = create_app()
 
@@ -114,6 +116,45 @@ def home():
                   example: "Bem-vindo à API Verzo!"
     """
     return {"message": "Bem-vindo à API Verzo!"}, 200
+
+@app.after_request
+def log_request(response):
+    try:
+        # 1) Usuário (se autenticado)
+        username = getattr(g, "user_data", {}).get("username")
+
+        # 2) Endpoint
+        endpoint = request.path
+
+        # 3) Status HTTP
+        status_code = response.status_code
+
+        # 4) Timestamp UTC
+        ts = datetime.utcnow()
+
+        # 5) IP do cliente (X-Forwarded-For ou remote_addr)
+        forwarded = request.headers.get("X-Forwarded-For", "")
+        if forwarded:
+            # X-Forwarded-For pode vir como 'client, proxy1, proxy2...'
+            ip_addr = forwarded.split(",")[0].strip()
+        else:
+            ip_addr = request.remote_addr
+
+        # 6) Grava no MySQL
+        conn = create_db_connection_mysql()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO request_logs
+                  (username, endpoint, status_code, requested_at, ip_address)
+                VALUES
+                  (%s, %s, %s, %s, %s)
+            """, (username, endpoint, status_code, ts, ip_addr))
+            conn.commit()
+        conn.close()
+
+    except Exception:
+        logging.exception("Falha ao gravar log de requisição")
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

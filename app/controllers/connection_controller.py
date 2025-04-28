@@ -357,7 +357,7 @@ def test_database_connection(user_data, connection_id):
     """
     Testa uma conexão existente com base no ID e retorna logs detalhados.
     """
-    start_time = time.time()  # Marca o tempo inicial
+    start_time = time.time()
 
     try:
         logging.info(f"Testando conexão para connection_id: {connection_id}")
@@ -381,7 +381,7 @@ def test_database_connection(user_data, connection_id):
         # Testa a conexão
         result = DatabaseService.test_existing_connection(connection_data)
 
-        elapsed_time = round(time.time() - start_time, 3)  # Tempo decorrido
+        elapsed_time = round(time.time() - start_time, 3)
         logging.info(f"Tempo de teste de conexão: {elapsed_time} segundos")
 
         if result["status"] == "success":

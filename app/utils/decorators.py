@@ -4,30 +4,32 @@ import jwt
 from app.config.env import SECRET_KEY
 from app.utils.helpers import check_user_permission
 from app.config.db_config import create_db_connection_mysql 
+from flask import request, jsonify, g
 
 def token_required(f):
     @wraps(f)
     def decorator(*args, **kwargs):
         token = None
-
-        # Verifica se o token está no cabeçalho Authorization
-        if 'Authorization' in request.headers:
-            auth_header = request.headers['Authorization']
-            if auth_header.startswith("Bearer "):
-                token = auth_header.split("Bearer ")[1]
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split("Bearer ")[1]
 
         if not token:
             return jsonify({"status": "error", "message": "Token é necessário"}), 401
 
         try:
-            # Decodifica o token JWT
             data = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
         except jwt.ExpiredSignatureError:
             return jsonify({"status": "error", "message": "Token expirado"}), 401
         except jwt.InvalidTokenError:
             return jsonify({"status": "error", "message": "Token inválido"}), 401
 
-        return f(user_data=data, *args, **kwargs)
+        # guarda em g, para o after_request também usar
+        g.user_data = data
+        # injeta no kwargs para as views continuarem recebendo user_data
+        kwargs['user_data'] = data
+
+        return f(*args, **kwargs)
     return decorator
 
 def admin_required(f):
