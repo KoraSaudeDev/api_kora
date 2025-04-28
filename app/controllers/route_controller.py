@@ -37,108 +37,115 @@ def generate_slug(name):
 def create_route(user_data):
     """
     Cria uma nova rota, salvando no banco os dados de query normal, pré-processada e/ou pós-processada,
-    relacionando também com sistemas e conexões.
+    relacionando também com sistemas e conexões, e parâmetros com stage opcional ('default' ou 'post').
     """
     try:
-        # Obter os dados da requisição
-        data = request.json
+        # 1) Obter os dados da requisição
+        data = request.json or {}
         logging.info(f"Requisição recebida: {json.dumps(data, indent=4)}")
 
-        # Extração dos campos
-        name = data.get("name")
-        system_id = data.get("system_id")
-        connection_ids = data.get("connection_ids", [])
-        pre_query = data.get("pre_query")
-        query_true = data.get("query_true")
-        query_false = data.get("query_false")
-        query = data.get("query")  # Query principal
-        post_query = data.get("post_query")
-        dml_personalizado = data.get("dml_personalizado")
-        is_pre_processed = data.get("is_pre_processed", False)
-        is_post_processed = data.get("is_post_processed", False)
-        parameters = data.get("parameters", [])
+        # 2) Extrair campos principais
+        name               = data.get("name")
+        system_id          = data.get("system_id")
+        connection_ids     = data.get("connection_ids", [])
+        pre_query          = data.get("pre_query")
+        query_true         = data.get("query_true")
+        query_false        = data.get("query_false")
+        query              = data.get("query")           # query principal
+        post_query         = data.get("post_query")
+        dml_personalizado  = data.get("dml_personalizado")
+        is_pre_processed   = data.get("is_pre_processed", False)
+        is_post_processed  = data.get("is_post_processed", False)
+        parameters         = data.get("parameters", [])
 
-        # Validações: Pelo menos uma query deve existir
+        # 3) Validações de existência de query
         if not any([query, pre_query, query_true, query_false, post_query, dml_personalizado]):
             return jsonify({
                 "status": "error",
-                "message": ("Pelo menos uma das queries (query, pre_query, query_true, query_false, " +
+                "message": ("Pelo menos uma das queries (query, pre_query, query_true, query_false, "
                             "post_query ou dml_personalizado) deve estar preenchida.")
             }), 400
 
-        # Validação para pré-processamento
         if is_pre_processed and not any([pre_query, query_true, query_false]):
             return jsonify({
                 "status": "error",
-                "message": ("Pré-processamento ativado, mas nenhuma query foi fornecida " +
+                "message": ("Pré-processamento ativado, mas nenhuma query foi fornecida "
                             "(pre_query, query_true, query_false).")
             }), 400
 
-        # Validação para pós-processamento
         if is_post_processed and not post_query:
             return jsonify({
                 "status": "error",
                 "message": "Pós-processamento ativado, mas post_query está vazia."
             }), 400
 
-        # Determinação do tipo de rota (query_type)
+        # 4) Determinar tipo de rota
         if is_pre_processed and is_post_processed:
             query_type = "pré e pós-processada"
         elif is_pre_processed:
             query_type = "pré-processada"
         elif is_post_processed:
             query_type = "pós-processada"
-        elif query or dml_personalizado:
-            query_type = "normal"
         else:
-            query_type = "indefinida"
+            query_type = "normal"
 
-        # Gerar slug para a rota
+        # 5) Gerar slug
         slug = generate_slug(name)
         logging.info(f"Gerado slug: {slug} | Tipo de query: {query_type}")
 
-        # Conectar ao banco de dados MySQL
+        # 6) Conectar ao MySQL e inserir na tabela routes
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
-
-        # Inserir a rota na tabela 'routes'
         query_insert_route = """
             INSERT INTO routes 
-                (name, slug, system_id, query, pre_query, query_true, query_false, post_query, 
+                (name, slug, system_id, query, pre_query, query_true, query_false, post_query,
                  dml_personalizado, is_pre_processed, is_post_processed, query_path, created_at)
             VALUES 
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """
-        # Aqui, query_path é definido como NULL (pode ser usado futuramente)
         cursor.execute(query_insert_route, (
             name, slug, system_id, query, pre_query, query_true, query_false, post_query,
             dml_personalizado, is_pre_processed, is_post_processed, None
         ))
         route_id = cursor.lastrowid
 
-        # Inserir os parâmetros na tabela 'route_parameters', se houver
+        # 7) Inserir parâmetros com stage opcional (NULL = default)
         if parameters:
             query_insert_parameters = """
-                INSERT INTO route_parameters (route_id, name, type, value)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO route_parameters
+                  (route_id, name, type, value, stage)
+                VALUES (%s, %s, %s, %s, %s)
             """
             for param in parameters:
-                param_name = param.get("name")
-                param_type = param.get("type", "").lower()
-                param_value = param.get("value", "")  # Agora capturamos o value corretamente
-                logging.info(f"Processando parâmetro: {param_name} | Tipo: {param_type} | Valor: {param_value}")
-                cursor.execute(query_insert_parameters, (route_id, param_name, param_type, param_value))
+                param_name  = param.get("name")
+                param_type  = param.get("type", "").lower()
+                param_value = param.get("value", "")
+                stage       = param.get("stage")  # 'default', 'post' ou None
 
-        # Relacionar a rota com as conexões na tabela 'route_connections'
+                # validar stage
+                if stage not in (None, "default", "post"):
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Stage inválido no parâmetro '{param_name}': {stage}"
+                    }), 400
+
+                logging.info(f"Parâmetro => name: {param_name}, type: {param_type}, "
+                             f"value: {param_value}, stage: {stage or 'default'}")
+                cursor.execute(
+                    query_insert_parameters,
+                    (route_id, param_name, param_type, param_value, stage)
+                )
+
+        # 8) Relacionar a rota com conexões
         if connection_ids:
             query_insert_connections = """
                 INSERT INTO route_connections (route_id, connection_id)
                 VALUES (%s, %s)
             """
-            for connection_id in connection_ids:
-                cursor.execute(query_insert_connections, (route_id, connection_id))
+            for conn_id in connection_ids:
+                cursor.execute(query_insert_connections, (route_id, conn_id))
 
-        # Efetuar o commit e fechar a conexão
+        # 9) Commit e cleanup
         conn.commit()
         cursor.close()
         conn.close()
@@ -151,16 +158,16 @@ def create_route(user_data):
         }), 201
 
     except Exception as e:
-        logging.error(f"❌ Erro ao processar query: {e}")
+        logging.error(f"❌ Erro ao criar rota: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @route_bp.route('/list', methods=['GET'])
 @token_required
-
 @permission_required(route_prefix='/routes')
 def list_routes(user_data):
     """
     Lista todas as rotas com suas associações e suporta paginação.
+    Inclui agora em cada parâmetro o seu 'stage' (ou 'default' quando NULL).
     """
     try:
         # Obter parâmetros de paginação
@@ -171,75 +178,90 @@ def list_routes(user_data):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar rotas com paginação
+        # 1) Buscar rotas com paginação
         query_routes = f"""
-            SELECT r.id, r.name, r.slug, r.query, r.created_at, r.updated_at,
-                   GROUP_CONCAT(rs.system_id) AS system_ids,
-                   GROUP_CONCAT(rc.connection_id) AS connection_ids
-            FROM routes r
-            LEFT JOIN route_systems rs ON r.id = rs.route_id
-            LEFT JOIN route_connections rc ON r.id = rc.route_id
-            GROUP BY r.id
-            ORDER BY r.name
-            LIMIT {limit} OFFSET {offset}
+            SELECT r.id,
+                   r.name,
+                   r.slug,
+                   r.query,
+                   r.created_at,
+                   r.updated_at,
+                   GROUP_CONCAT(DISTINCT rs.system_id)     AS system_ids,
+                   GROUP_CONCAT(DISTINCT rc.connection_id) AS connection_ids
+              FROM routes r
+              LEFT JOIN route_systems rs       ON r.id = rs.route_id
+              LEFT JOIN route_connections rc   ON r.id = rc.route_id
+             GROUP BY r.id
+             ORDER BY r.name
+             LIMIT {limit} OFFSET {offset}
         """
         cursor.execute(query_routes)
         routes = cursor.fetchall()
 
-        # Obter parâmetros associados às rotas
+        # 2) Buscar parâmetros (agora incluindo o campo stage)
         query_parameters = """
-            SELECT rp.route_id, rp.name AS parameter_name, rp.type AS parameter_type, rp.value AS parameter_value
-            FROM route_parameters rp
+            SELECT 
+                rp.route_id,
+                rp.name            AS parameter_name,
+                rp.type            AS parameter_type,
+                rp.value           AS parameter_value,
+                rp.stage           AS parameter_stage
+              FROM route_parameters rp
         """
         cursor.execute(query_parameters)
         parameters = cursor.fetchall()
 
-        # Organizar parâmetros associados por rota
-        route_parameters = {}
-        for param in parameters:
-            route_id = param["route_id"]
-            if route_id not in route_parameters:
-                route_parameters[route_id] = []
-            route_parameters[route_id].append({
-                "name": param["parameter_name"],
-                "type": param["parameter_type"],
-                "value": param["parameter_value"]
-            })
-
-        # Contar o total de rotas
-        count_query = "SELECT COUNT(*) AS total FROM routes"
-        cursor.execute(count_query)
-        total_count = cursor.fetchone()["total"]
-
         cursor.close()
         conn.close()
 
-        # Organizar a resposta
+        # 3) Agrupar parâmetros por rota
+        route_parameters = {}
+        for p in parameters:
+            rid   = p["route_id"]
+            stage = p["parameter_stage"] or "default"
+            entry = {
+                "name":  p["parameter_name"],
+                "type":  p["parameter_type"],
+                "value": p["parameter_value"],
+                "stage": stage
+            }
+            route_parameters.setdefault(rid, []).append(entry)
+
+        # 4) Contar total de rotas
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT COUNT(*) AS total FROM routes")
+        total_count = cursor.fetchone()["total"]
+        cursor.close()
+        conn.close()
+
+        # 5) Montar payload
         response = []
-        for route in routes:
+        for r in routes:
             response.append({
-                "id": route["id"],
-                "name": route["name"],
-                "slug": route["slug"],
-                "query": route["query"],
-                "created_at": route["created_at"],
-                "updated_at": route["updated_at"],
-                "system_ids": route["system_ids"].split(",") if route["system_ids"] else [],
-                "connection_ids": route["connection_ids"].split(",") if route["connection_ids"] else [],
-                "parameters": route_parameters.get(route["id"], [])
+                "id":             r["id"],
+                "name":           r["name"],
+                "slug":           r["slug"],
+                "query":          r["query"],
+                "created_at":     r["created_at"],
+                "updated_at":     r["updated_at"],
+                "system_ids":     (r["system_ids"]     or "").split(","),
+                "connection_ids": (r["connection_ids"] or "").split(","),
+                "parameters":     route_parameters.get(r["id"], [])
             })
 
         return jsonify({
             "status": "success",
-            "page": page,
-            "limit": limit,
-            "total": total_count,
-            "routes": response
+            "page":    page,
+            "limit":   limit,
+            "total":   total_count,
+            "routes":  response
         }), 200
 
     except Exception as e:
+        logging.exception("Erro ao listar rotas")
         return jsonify({
-            "status": "error",
+            "status":  "error",
             "message": str(e)
         }), 500
 
@@ -316,29 +338,25 @@ def list_route_connections(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
-    Edita uma rota existente com base no ID fornecido.
+    Edita uma rota existente com base no ID fornecido, incluindo agora o campo 'stage' nos parâmetros.
     """
     try:
-        # Obter os dados da requisição
         data = request.json
         if not data:
             return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
 
-        # Conectar ao banco de dados
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Validar se a rota existe
-        query_check_route = "SELECT * FROM routes WHERE id = %s"
-        cursor.execute(query_check_route, (route_id,))
+        # Verifica se a rota existe
+        cursor.execute("SELECT * FROM routes WHERE id = %s", (route_id,))
         existing_route = cursor.fetchone()
-
         if not existing_route:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Atualizar os campos da rota
+        # Atualizar os campos editáveis da rota
         update_fields = []
         update_values = []
         editable_fields = ["name", "query"]
@@ -348,22 +366,20 @@ def edit_route(user_data, route_id):
                 update_values.append(data[field])
 
         if update_fields:
-            # Atualizar slug se o nome for alterado
+            # Atualizar slug se o nome mudar
             if "name" in data:
                 slug = generate_slug(data["name"])
                 update_fields.append("slug = %s")
                 update_values.append(slug)
 
-            # Atualizar `query_path` se necessário
-            save_query_to_file = data.get("save_query_to_file", False)
-            if save_query_to_file and "query" in data:
+            # Atualizar query_path se necessário
+            if data.get("save_query_to_file") and "query" in data:
                 slug = generate_slug(data["name"]) if "name" in data else existing_route["slug"]
                 system_folder = os.path.join("app", "queries", slug)
-                if not os.path.exists(system_folder):
-                    os.makedirs(system_folder)
+                os.makedirs(system_folder, exist_ok=True)
                 query_path = os.path.join(system_folder, f"{slug}.sql")
-                with open(query_path, "w", encoding="utf-8") as file:
-                    file.write(data["query"])
+                with open(query_path, "w", encoding="utf-8") as f:
+                    f.write(data["query"])
                 update_fields.append("query_path = %s")
                 update_values.append(query_path)
 
@@ -378,16 +394,22 @@ def edit_route(user_data, route_id):
             if not isinstance(system_ids, list):
                 system_ids = [system_ids]
             for system_id in system_ids:
-                cursor.execute("INSERT INTO route_systems (route_id, system_id) VALUES (%s, %s)", (route_id, system_id))
+                cursor.execute(
+                    "INSERT INTO route_systems (route_id, system_id) VALUES (%s, %s)",
+                    (route_id, system_id)
+                )
 
         # Atualizar conexões relacionadas
         if "connection_ids" in data:
             cursor.execute("DELETE FROM route_connections WHERE route_id = %s", (route_id,))
             connection_ids = data["connection_ids"]
             for connection_id in connection_ids:
-                cursor.execute("INSERT INTO route_connections (route_id, connection_id) VALUES (%s, %s)", (route_id, connection_id))
+                cursor.execute(
+                    "INSERT INTO route_connections (route_id, connection_id) VALUES (%s, %s)",
+                    (route_id, connection_id)
+                )
 
-        # Atualizar parâmetros
+        # Atualizar parâmetros, agora com 'stage'
         if "parameters" in data:
             cursor.execute("DELETE FROM route_parameters WHERE route_id = %s", (route_id,))
             parameters = data["parameters"]
@@ -395,16 +417,16 @@ def edit_route(user_data, route_id):
                 param_name = param["name"]
                 param_type = param["type"].lower()
                 param_value = param["value"]
+                param_stage = param.get("stage")  # Pode ser None
 
-                # **🚀 Novo Tratamento para `DATE` e `DATETIME`**
                 if param_type == "date":
-                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d')"  # MySQL
+                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d')"
                 elif param_type == "datetime":
-                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d %H:%i:%s')"  # MySQL
+                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d %H:%i:%s')"
 
                 cursor.execute(
-                    "INSERT INTO route_parameters (route_id, name, type, value) VALUES (%s, %s, %s, %s)",
-                    (route_id, param_name, param_type, param_value)
+                    "INSERT INTO route_parameters (route_id, name, type, value, stage) VALUES (%s, %s, %s, %s, %s)",
+                    (route_id, param_name, param_type, param_value, param_stage)
                 )
 
         conn.commit()
@@ -414,6 +436,7 @@ def edit_route(user_data, route_id):
         return jsonify({"status": "success", "message": "Rota atualizada com sucesso."}), 200
 
     except Exception as e:
+        logging.exception("Erro ao editar rota")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @route_bp.route('/profile/<int:route_id>', methods=['GET'])
@@ -421,13 +444,14 @@ def edit_route(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def get_route_details(user_data, route_id):
     """
-    Retorna os detalhes de uma rota específica com base no ID fornecido, incluindo parâmetros, conexões e sistemas vinculados.
+    Retorna os detalhes de uma rota específica com base no ID fornecido,
+    incluindo parâmetros (com stage), conexões e sistemas vinculados.
     """
     try:
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Buscar os detalhes da rota, incluindo post_query
+        # 1) Buscar os detalhes da rota
         query_route = """
             SELECT id, name, slug, query, description, post_query, system_id
             FROM routes
@@ -435,29 +459,29 @@ def get_route_details(user_data, route_id):
         """
         cursor.execute(query_route, (route_id,))
         route = cursor.fetchone()
-
         if not route:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Buscar os parâmetros da rota
+        # 2) Buscar os parâmetros da rota, agora com o campo 'stage'
         query_parameters = """
-            SELECT name, type, value
+            SELECT name, type, value, stage
             FROM route_parameters
             WHERE route_id = %s
         """
         cursor.execute(query_parameters, (route_id,))
         parameters = cursor.fetchall()
-
-        # Corrigir se algum value vier nulo
+        # Se algum value vier nulo, transformamos em string vazia
         for param in parameters:
             if param["value"] is None:
                 param["value"] = ""
+            # stage pode ser None → no JSON ficará null
 
-        # Buscar as conexões associadas à rota
+        # 3) Buscar as conexões associadas
         query_connections = """
-            SELECT c.id, c.name, c.db_type, c.host, c.port, c.username, c.database_name, c.slug
+            SELECT c.id, c.name, c.db_type, c.host, c.port,
+                   c.username, c.database_name, c.slug
             FROM connections c
             JOIN route_connections rc ON c.id = rc.connection_id
             WHERE rc.route_id = %s
@@ -465,7 +489,7 @@ def get_route_details(user_data, route_id):
         cursor.execute(query_connections, (route_id,))
         connections = cursor.fetchall()
 
-        # Buscar os sistemas associados (primeiro pela tabela route_systems)
+        # 4) Buscar sistemas associados
         query_systems = """
             SELECT s.id, s.name, s.slug
             FROM systems s
@@ -474,15 +498,9 @@ def get_route_details(user_data, route_id):
         """
         cursor.execute(query_systems, (route_id,))
         systems = cursor.fetchall()
-
-        # Se não encontrar sistemas relacionados, buscar pelo system_id da tabela routes
+        # fallback para campo system_id em routes
         if not systems and route.get("system_id"):
-            query_system_direct = """
-                SELECT id, name, slug
-                FROM systems
-                WHERE id = %s
-            """
-            cursor.execute(query_system_direct, (route["system_id"],))
+            cursor.execute("SELECT id, name, slug FROM systems WHERE id = %s", (route["system_id"],))
             system = cursor.fetchone()
             if system:
                 systems = [system]
@@ -490,18 +508,15 @@ def get_route_details(user_data, route_id):
         cursor.close()
         conn.close()
 
-        # Adicionar parâmetros, conexões e sistemas ao objeto da rota
-        route["parameters"] = parameters
+        # 5) Montar o objeto de resposta
+        route["parameters"]  = parameters
         route["connections"] = connections
-        route["systems"] = systems
+        route["systems"]     = systems
 
-        return jsonify({
-            "status": "success",
-            "route": route
-        }), 200
+        return jsonify({"status": "success", "route": route}), 200
 
     except Exception as e:
-        logging.error(f"Erro ao buscar detalhes da rota: {e}")
+        logging.exception("Erro ao buscar detalhes da rota")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 def remove_quoted_strings(sql: str) -> str:

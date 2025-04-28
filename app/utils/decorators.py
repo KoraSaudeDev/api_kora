@@ -5,6 +5,7 @@ from app.config.env import SECRET_KEY
 from app.utils.helpers import check_user_permission
 from app.config.db_config import create_db_connection_mysql 
 from flask import request, jsonify, g
+import logging
 
 def token_required(f):
     @wraps(f)
