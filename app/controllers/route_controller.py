@@ -356,77 +356,77 @@ def edit_route(user_data, route_id):
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # Atualizar os campos editáveis da rota
-        update_fields = []
-        update_values = []
-        editable_fields = ["name", "query"]
-        for field in editable_fields:
+        # 1) Atualizar campos básicos
+        update_fields, update_values = [], []
+        for field in ("name", "query"):
             if field in data:
                 update_fields.append(f"{field} = %s")
                 update_values.append(data[field])
-
         if update_fields:
-            # Atualizar slug se o nome mudar
+            # se mudou o name, atualiza o slug também
             if "name" in data:
-                slug = generate_slug(data["name"])
+                new_slug = generate_slug(data["name"])
                 update_fields.append("slug = %s")
-                update_values.append(slug)
+                update_values.append(new_slug)
 
-            # Atualizar query_path se necessário
+            # opcional: salvar query em arquivo
             if data.get("save_query_to_file") and "query" in data:
-                slug = generate_slug(data["name"]) if "name" in data else existing_route["slug"]
-                system_folder = os.path.join("app", "queries", slug)
-                os.makedirs(system_folder, exist_ok=True)
-                query_path = os.path.join(system_folder, f"{slug}.sql")
-                with open(query_path, "w", encoding="utf-8") as f:
+                slug = new_slug if "name" in data else existing_route["slug"]
+                folder = os.path.join("app", "queries", slug)
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, f"{slug}.sql")
+                with open(path, "w", encoding="utf-8") as f:
                     f.write(data["query"])
                 update_fields.append("query_path = %s")
-                update_values.append(query_path)
+                update_values.append(path)
 
             update_values.append(route_id)
-            query_update_route = f"UPDATE routes SET {', '.join(update_fields)} WHERE id = %s"
-            cursor.execute(query_update_route, tuple(update_values))
+            sql = f"UPDATE routes SET {', '.join(update_fields)} WHERE id = %s"
+            cursor.execute(sql, tuple(update_values))
 
-        # Atualizar sistemas relacionados
+        # 2) Sistemas
         if "system_id" in data:
             cursor.execute("DELETE FROM route_systems WHERE route_id = %s", (route_id,))
-            system_ids = data["system_id"]
-            if not isinstance(system_ids, list):
-                system_ids = [system_ids]
-            for system_id in system_ids:
+            ids = data["system_id"]
+            if not isinstance(ids, list):
+                ids = [ids]
+            for sid in ids:
                 cursor.execute(
                     "INSERT INTO route_systems (route_id, system_id) VALUES (%s, %s)",
-                    (route_id, system_id)
+                    (route_id, sid)
                 )
 
-        # Atualizar conexões relacionadas
+        # 3) Conexões
         if "connection_ids" in data:
             cursor.execute("DELETE FROM route_connections WHERE route_id = %s", (route_id,))
-            connection_ids = data["connection_ids"]
-            for connection_id in connection_ids:
+            for cid in data["connection_ids"]:
                 cursor.execute(
                     "INSERT INTO route_connections (route_id, connection_id) VALUES (%s, %s)",
-                    (route_id, connection_id)
+                    (route_id, cid)
                 )
 
-        # Atualizar parâmetros, agora com 'stage'
+        # 4) Parâmetros (agora com stage e usando .get)
         if "parameters" in data:
             cursor.execute("DELETE FROM route_parameters WHERE route_id = %s", (route_id,))
-            parameters = data["parameters"]
-            for param in parameters:
-                param_name = param["name"]
-                param_type = param["type"].lower()
-                param_value = param["value"]
-                param_stage = param.get("stage")  # Pode ser None
+            for param in data["parameters"]:
+                name  = param.get("name")
+                ptype = (param.get("type") or "").lower()
+                pvalue = param.get("value")    # pode ser None
+                stage  = param.get("stage")    # pode ser None
 
-                if param_type == "date":
-                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d')"
-                elif param_type == "datetime":
-                    param_value = f"STR_TO_DATE('{param_value}', '%Y-%m-%d %H:%i:%s')"
+                # convertendo formatos de data, se quiser manter
+                if ptype == "date" and pvalue:
+                    pvalue = f"STR_TO_DATE('{pvalue}', '%Y-%m-%d')"
+                elif ptype == "datetime" and pvalue:
+                    pvalue = f"STR_TO_DATE('{pvalue}', '%Y-%m-%d %H:%i:%s')"
 
                 cursor.execute(
-                    "INSERT INTO route_parameters (route_id, name, type, value, stage) VALUES (%s, %s, %s, %s, %s)",
-                    (route_id, param_name, param_type, param_value, param_stage)
+                    """
+                    INSERT INTO route_parameters
+                      (route_id, name, type, value, stage)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (route_id, name, ptype, pvalue, stage)
                 )
 
         conn.commit()
