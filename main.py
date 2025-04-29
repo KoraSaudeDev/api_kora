@@ -11,6 +11,7 @@ from app.controllers.system_controller import system_bp
 from app.controllers.user_controller import user_bp
 # from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
+from app.controllers.dashboard_controller import dashboard_bp
 import logging
 import sys
 from app import create_app
@@ -95,6 +96,7 @@ app.register_blueprint(system_bp, url_prefix="/api/systems")
 app.register_blueprint(user_bp, url_prefix="/api/users")
 # app.register_blueprint(executor_bp, url_prefix="/api/executors")
 app.register_blueprint(access_bp, url_prefix="/api/access")
+app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
 
 @app.route('/api', methods=['GET'])
 def home():
