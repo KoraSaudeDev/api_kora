@@ -89,23 +89,36 @@ def create_access(user_data=None):
         logging.error(f"Erro ao criar access: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-
 @access_bp.route('/list', methods=['GET'])
 @token_required
 @permission_required(route_prefix='/access')
 def list_access(user_data):
     """
-    Lista todos os `access` e suas rotas dinâmicas (`slugs`) e fixas (`prefixos`).
+    Lista todos os `access` e suas rotas dinâmicas (`slugs`) e fixas (`prefixos`) com paginação.
     """
     try:
+        page = int(request.args.get("page", 1))
+        limit = int(request.args.get("limit", 100))
+        offset = (page - 1) * limit
+
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        query_access = "SELECT id, name, slug, created_at FROM access"
-        cursor.execute(query_access)
+        # Buscar accesses com paginação
+        query_access = """
+            SELECT id, name, slug, created_at
+            FROM access
+            ORDER BY id DESC
+            LIMIT %s OFFSET %s
+        """
+        cursor.execute(query_access, (limit, offset))
         accesses = cursor.fetchall()
 
-        # Buscar associações de slugs e prefixos
+        # Contar o total de registros
+        cursor.execute("SELECT COUNT(*) AS total FROM access")
+        total_count = cursor.fetchone()["total"]
+
+        # Buscar todas as rotas de access
         query_routes = """
             SELECT access_id, route_slug, route_prefix
             FROM access_routes
@@ -130,13 +143,17 @@ def list_access(user_data):
             }
 
         for route in routes:
-            if route['route_slug']:
-                access_data[route['access_id']]["route_slugs"].append(route['route_slug'])
-            if route['route_prefix']:
-                access_data[route['access_id']]["route_prefixes"].append(route['route_prefix'])
+            if route['access_id'] in access_data:
+                if route['route_slug']:
+                    access_data[route['access_id']]["route_slugs"].append(route['route_slug'])
+                if route['route_prefix']:
+                    access_data[route['access_id']]["route_prefixes"].append(route['route_prefix'])
 
         return jsonify({
             "status": "success",
+            "page": page,
+            "limit": limit,
+            "total": total_count,
             "accesses": list(access_data.values())
         }), 200
 

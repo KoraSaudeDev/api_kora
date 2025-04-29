@@ -415,7 +415,7 @@ def list_connections(user_data):
         query = """
             SELECT id, name, db_type, host, port, username, database_name, service_name, created_at 
             FROM connections
-            ORDER BY id
+            ORDER BY id DESC
             LIMIT %s OFFSET %s
         """
         cursor.execute(query, (limit, offset))
