@@ -346,67 +346,74 @@ def list_route_connections(user_data, route_id):
 @permission_required(route_prefix='/routes')
 def edit_route(user_data, route_id):
     """
-    Edita uma rota existente com base no ID fornecido, incluindo agora o campo 'stage' nos parâmetros,
-    e tratamento especial para valores booleanos.
+    Edita uma rota existente com base no ID fornecido, now incluindo:
+      - post_query, pre_query, query_true, query_false, dml_personalizado
+      - flags is_pre_processed, is_post_processed
+      - tratamento de parâmetros com stage e tipos especiais
     """
     try:
-        data = request.json
+        data = request.json or {}
         if not data:
             return jsonify({"status": "error", "message": "Nenhum dado enviado para atualização."}), 400
 
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
 
-        # Verifica se a rota existe
+        # 1) Verifica se a rota existe
         cursor.execute("SELECT * FROM routes WHERE id = %s", (route_id,))
-        existing_route = cursor.fetchone()
-        if not existing_route:
+        existing = cursor.fetchone()
+        if not existing:
             cursor.close()
             conn.close()
             return jsonify({"status": "error", "message": "Rota não encontrada."}), 404
 
-        # 1) Atualizar campos básicos
-        update_fields, update_values = [], []
-        for field in ("name", "query"):
+        # 2) Campos que podem ser atualizados diretamente
+        editable = [
+            "name", "query", "pre_query", "query_true", "query_false",
+            "post_query", "dml_personalizado", "is_pre_processed", "is_post_processed"
+        ]
+        update_fields = []
+        update_values = []
+        for field in editable:
             if field in data:
                 update_fields.append(f"{field} = %s")
                 update_values.append(data[field])
 
+        # se mudou name, atualiza slug também
+        if "name" in data:
+            new_slug = generate_slug(data["name"])
+            update_fields.append("slug = %s")
+            update_values.append(new_slug)
+
+        # salvar query em arquivo, se solicitado
+        if data.get("save_query_to_file") and "query" in data:
+            slug = new_slug if "name" in data else existing["slug"]
+            folder = os.path.join("app", "queries", slug)
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, f"{slug}.sql")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(data["query"])
+            update_fields.append("query_path = %s")
+            update_values.append(path)
+
         if update_fields:
-            # Atualiza o slug se o name mudou
-            if "name" in data:
-                new_slug = generate_slug(data["name"])
-                update_fields.append("slug = %s")
-                update_values.append(new_slug)
-
-            # Salvar query em arquivo, se solicitado
-            if data.get("save_query_to_file") and "query" in data:
-                slug = new_slug if "name" in data else existing_route["slug"]
-                folder = os.path.join("app", "queries", slug)
-                os.makedirs(folder, exist_ok=True)
-                path = os.path.join(folder, f"{slug}.sql")
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(data["query"])
-                update_fields.append("query_path = %s")
-                update_values.append(path)
-
             update_values.append(route_id)
             sql = f"UPDATE routes SET {', '.join(update_fields)} WHERE id = %s"
             cursor.execute(sql, tuple(update_values))
 
-        # 2) Atualizar sistemas vinculados
+        # 3) Sistemas
         if "system_id" in data:
             cursor.execute("DELETE FROM route_systems WHERE route_id = %s", (route_id,))
-            ids = data["system_id"]
-            if not isinstance(ids, list):
-                ids = [ids]
-            for sid in ids:
+            sids = data["system_id"]
+            if not isinstance(sids, list):
+                sids = [sids]
+            for sid in sids:
                 cursor.execute(
                     "INSERT INTO route_systems (route_id, system_id) VALUES (%s, %s)",
                     (route_id, sid)
                 )
 
-        # 3) Atualizar conexões vinculadas
+        # 4) Conexões
         if "connection_ids" in data:
             cursor.execute("DELETE FROM route_connections WHERE route_id = %s", (route_id,))
             for cid in data["connection_ids"]:
@@ -415,26 +422,27 @@ def edit_route(user_data, route_id):
                     (route_id, cid)
                 )
 
-        # 4) Atualizar parâmetros com stage e tratamento de tipos
+        # 5) Parâmetros (com stage e tipos especiais)
         if "parameters" in data:
             cursor.execute("DELETE FROM route_parameters WHERE route_id = %s", (route_id,))
             for param in data["parameters"]:
-                name  = param.get("name")
-                ptype = (param.get("type") or "").lower()
-                pvalue = param.get("value")    # pode ser None
-                stage  = param.get("stage")    # pode ser None
+                name   = param.get("name")
+                ptype  = (param.get("type") or "").lower()
+                pvalue = param.get("value")
+                stage  = param.get("stage")
 
-                # tratamento especial para valores
+                # data / datetime
                 if ptype == "date" and pvalue:
                     pvalue = f"STR_TO_DATE('{pvalue}', '%Y-%m-%d')"
                 elif ptype == "datetime" and pvalue:
                     pvalue = f"STR_TO_DATE('{pvalue}', '%Y-%m-%d %H:%i:%s')"
+                # boolean
                 elif ptype == "boolean":
                     if isinstance(pvalue, bool):
                         pvalue = 1 if pvalue else 0
                     else:
                         sval = str(pvalue).strip().lower()
-                        pvalue = 1 if sval in ("1", "true", "t", "s", "y", "yes") else 0
+                        pvalue = 1 if sval in ("1","true","t","s","y","yes") else 0
 
                 cursor.execute(
                     """
@@ -454,7 +462,6 @@ def edit_route(user_data, route_id):
     except Exception as e:
         logging.exception("Erro ao editar rota")
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @route_bp.route('/profile/<int:route_id>', methods=['GET'])
 @token_required
