@@ -43,7 +43,7 @@ def dashboard_relatorio():
 
         # Gráfico 1: Top 10 rotas mais acessadas
         cursor.execute(f"""
-            SELECT endpoint, COUNT(*) as quantidade
+            SELECT endpoint, COUNT(*) AS quantidade
             FROM request_logs
             {where_clause}
             GROUP BY endpoint
@@ -55,7 +55,7 @@ def dashboard_relatorio():
 
         # Gráfico 2: Top 10 usuários que mais acessaram
         cursor.execute(f"""
-            SELECT username, COUNT(*) as quantidade
+            SELECT username, COUNT(*) AS quantidade
             FROM request_logs
             {where_clause}
             GROUP BY username
@@ -63,11 +63,14 @@ def dashboard_relatorio():
             LIMIT 10
         """, valores)
         usuarios_data = [{"username": row[0], "quantidade": row[1]} for row in cursor.fetchall()]
-        total_usuarios = sum(u["quantidade"] for u in usuarios_data)
+
+        # Novo total_usuarios: total de usuários cadastrados na tabela `users`
+        cursor.execute("SELECT COUNT(*) FROM users")
+        total_usuarios = cursor.fetchone()[0]
 
         # Gráfico 3: Requisições por dia
         if not data_inicio and not data_fim:
-            # Se nenhuma data for fornecida, limitar aos últimos 7 dias
+            # últimos 7 dias por padrão
             filtros_dias = ["requested_at >= %s"]
             valores_dias = [(datetime.utcnow() - timedelta(days=7)).strftime('%Y-%m-%d')]
             if username:
@@ -82,13 +85,16 @@ def dashboard_relatorio():
             valores_dias = valores
 
         cursor.execute(f"""
-            SELECT DATE(requested_at) as dia, COUNT(*) as quantidade
+            SELECT DATE(requested_at) AS dia, COUNT(*) AS quantidade
             FROM request_logs
             {where_clause_dias}
             GROUP BY dia
             ORDER BY dia ASC
         """, valores_dias)
-        dias_data = [{"dia": row[0].strftime('%Y-%m-%d'), "quantidade": row[1]} for row in cursor.fetchall()]
+        dias_data = [
+            {"dia": row[0].strftime('%Y-%m-%d'), "quantidade": row[1]}
+            for row in cursor.fetchall()
+        ]
         total_dias = sum(d["quantidade"] for d in dias_data)
 
         cursor.close()
