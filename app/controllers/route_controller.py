@@ -729,7 +729,7 @@ def execute_route_query(user_data, slug):
                             continue  # tenta novamente
                         else:
                             results[db_slug] = {
-                                "error": "❌ Falha na execução após ajustes, de remoção de campos que não existem na tabela",
+                                "error": f"❌ Falha na execução após ajustes, de remoção de campos que não existem na tabela. Último campo removido: '{invalid_column}'",
                                 "message": last_error,
                                 "executed_query": current_query,
                                 "query_parameters": query_parameters
