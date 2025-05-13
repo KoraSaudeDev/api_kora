@@ -119,44 +119,5 @@ def home():
     """
     return {"message": "Bem-vindo à API Verzo!"}, 200
 
-@app.after_request
-def log_request(response):
-    try:
-        # 1) Usuário (se autenticado via token_required, gravamos em g.user_data)
-        user_data = getattr(g, "user_data", None)
-        if user_data and user_data.get("username"):
-            username = user_data["username"]
-        else:
-            username = "Usuário Não Autenticado"
-
-        # 2) Endpoint
-        endpoint = request.path
-
-        # 3) Status HTTP
-        status_code = response.status_code
-
-        # 4) Timestamp UTC
-        ts = datetime.utcnow()
-
-        # 5) IP do cliente (X-Forwarded-For ou remote_addr)
-        xfwd = request.headers.get("X-Forwarded-For", "")
-        ip_addr = xfwd.split(",")[0].strip() if xfwd else request.remote_addr
-
-        # 6) Grava no MySQL
-        conn = create_db_connection_mysql()
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO request_logs
-                  (username, endpoint, status_code, requested_at, ip_address)
-                VALUES
-                  (%s, %s, %s, %s, %s)
-            """, (username, endpoint, status_code, ts, ip_addr))
-            conn.commit()
-        conn.close()
-
-    except Exception:
-        logging.exception("Falha ao gravar log de requisição")
-
-    return response
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
