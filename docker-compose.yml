@@ -13,4 +13,28 @@ services:
       LD_LIBRARY_PATH: /opt/oracle/instantclient
       PATH: "/opt/oracle/instantclient:$PATH"
       TNS_ADMIN: /opt/oracle/instantclient
+    depends_on:
+      - redis
+      - worker
     restart: always
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A celery_worker worker --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      FLASK_ENV: development
+      LD_LIBRARY_PATH: /opt/oracle/instantclient
+      PATH: "/opt/oracle/instantclient:$PATH"
+      TNS_ADMIN: /opt/oracle/instantclient
+    depends_on:
+      - redis
+

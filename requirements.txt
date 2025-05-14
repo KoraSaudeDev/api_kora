@@ -44,3 +44,6 @@ cassandra-driver==3.25.0  # Cassandra
 sqlalchemy==2.0.21
 hdbcli==2.23.24  # SAP HAN
 requests
+
+celery
+redis

@@ -17,6 +17,10 @@ import sys
 from app import create_app
 from datetime import datetime
 from app.config.db_config import create_db_connection_mysql
+from celery_worker import log_request_to_db
+import threading
+import time
+from app.middleware.rate_limiter import rate_limit
 
 app = create_app()
 
@@ -118,6 +122,30 @@ def home():
                   example: "Bem-vindo à API Verzo!"
     """
     return {"message": "Bem-vindo à API Verzo!"}, 200
+
+@app.before_request
+def before_request():
+    limit_response = rate_limit()
+    if limit_response:
+        return limit_response
+
+@app.after_request
+def log_request(response):
+    try:
+        user_data = getattr(g, "user_data", None)
+        username = user_data["username"] if user_data and user_data.get("username") else "Usuário Não Autenticado"
+        endpoint = request.path
+        status_code = response.status_code
+        ts = datetime.utcnow()
+        xfwd = request.headers.get("X-Forwarded-For", "")
+        ip_addr = xfwd.split(",")[0].strip() if xfwd else request.remote_addr
+
+        # ✅ Envia diretamente ao Celery — sem threading!
+        log_request_to_db.delay(username, endpoint, status_code, ts.isoformat(), ip_addr)
+    except Exception:
+        logging.exception("Erro ao preparar log assíncrono")
+    
+    return response
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
