@@ -97,10 +97,10 @@ def create_route(user_data):
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
         query_insert_route = """
-            INSERT INTO routes 
+            INSERT INTO routes
                 (name, slug, system_id, query, pre_query, query_true, query_false, post_query,
                  dml_personalizado, is_pre_processed, is_post_processed, query_path, created_at)
-            VALUES 
+            VALUES
                 (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
         """
         cursor.execute(query_insert_route, (
@@ -208,7 +208,7 @@ def list_routes(user_data):
 
         # 2) Buscar parâmetros (agora incluindo o campo stage)
         query_parameters = """
-            SELECT 
+            SELECT
                 rp.route_id,
                 rp.name            AS parameter_name,
                 rp.type            AS parameter_type,
@@ -326,7 +326,7 @@ def list_route_connections(user_data, route_id):
         cursor = conn.cursor(dictionary=True)
 
         query = """
-            SELECT c.id, c.name, c.db_type, c.host, c.port 
+            SELECT c.id, c.name, c.db_type, c.host, c.port
             FROM connections c
             JOIN route_connections rc ON c.id = rc.connection_id
             WHERE rc.route_id = %s
@@ -340,7 +340,7 @@ def list_route_connections(user_data, route_id):
         return jsonify({"status": "success", "connections": connections}), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-      
+
 @route_bp.route('/edit/<int:route_id>', methods=['PUT'])
 @token_required
 @permission_required(route_prefix='/routes')
@@ -555,9 +555,9 @@ def remove_quoted_strings(sql: str) -> str:
 @permission_required(route_prefix='/routes/execute')
 def execute_route_query(user_data, slug):
     try:
-        logging.error(f"⬹️ [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
+        logging.error(f"🔹 [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
         request_data = request.json or {}
-        logging.error(f"🗕️ Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
+        logging.error(f"📅 Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
 
         provided_connections = request_data.get("connections", [])
         provided_parameters_list = request_data.get("parameters", [])
@@ -567,10 +567,12 @@ def execute_route_query(user_data, slug):
             for conn_name, params in param_entry.items()
         }
 
-        # Carrega rota
+        # Obter rota
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT r.id, r.query FROM routes r WHERE r.slug = %s", (slug,))
+        cursor.execute("""
+            SELECT r.id, r.query FROM routes r WHERE r.slug = %s
+        """, (slug,))
         route = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -580,7 +582,7 @@ def execute_route_query(user_data, slug):
 
         query_legacy = route['query']
 
-        # Conexões
+        # Obter conexões
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
@@ -594,18 +596,53 @@ def execute_route_query(user_data, slug):
 
         slugs_requisitados = [c.strip().lower() for c in provided_connections]
         results = {}
+        executed_any_query = False
         last_error = None
 
-        def remove_invalid_column_from_query(query, param_name):
-            logging.warning(f"🚧 Removendo coluna/param: {param_name}")
-            query = re.sub(rf"TO_DATE\(\s*:\b{param_name}\b\s*,\s*'[^']*'\s*\)", "", query, flags=re.IGNORECASE)
+        def remove_invalid_column_from_query(query: str, param_name: str) -> str:
+            logging.warning(f"🛠️ Removendo coluna inválida: {param_name}")
+            original_query = query
+
+            # Remove TO_DATE(:param_name, 'format')
+            query = re.sub(rf"TO_DATE\s*\(\s*:\s*{param_name}\s*,\s*'[^']*'\s*\)", '', query, flags=re.IGNORECASE)
+
+            # Remove trunc(:param_name)
+            query = re.sub(rf"TRUNC\s*\(\s*:\s*{param_name}\s*\)", '', query, flags=re.IGNORECASE)
+
+            # Remove NVL(:param_name, ...)
+            query = re.sub(rf"NVL\s*\(\s*:\s*{param_name}\s*,\s*[^)]+\)", '', query, flags=re.IGNORECASE)
+
+            # Remove binds simples
+            query = re.sub(rf":{param_name}\b", '', query, flags=re.IGNORECASE)
+
+            # Remove a coluna do INSERT (antes ou depois da vírgula)
             query = re.sub(rf'\b{param_name}\b\s*,?', '', query, flags=re.IGNORECASE)
-            query = re.sub(rf':\b{param_name}\b\s*,?', '', query, flags=re.IGNORECASE)
+            query = re.sub(r',\s*\)', ')', query)
+
+            # Remove condições AND ... = :param
+            query = re.sub(
+                rf'AND\s+[^()]*{param_name}[^()]*?(=|<>|<|>|IS|LIKE|IN)[^()]*',
+                '',
+                query,
+                flags=re.IGNORECASE
+            )
+
+            # Limpeza de TO_DATE residual inválido
+            query = re.sub(r'TO_DATE\s*\(\s*:\s*,\s*\'[^\']*\'\s*\)', '', query, flags=re.IGNORECASE)
+
+            # Remove vírgulas duplas ou finais
             query = re.sub(r',\s*,', ',', query)
             query = re.sub(r'\(\s*,', '(', query)
             query = re.sub(r',\s*\)', ')', query)
-            query = re.sub(r',\s*(FROM|WHERE|VALUES|GROUP BY|ORDER BY)\b', r' \1', query, flags=re.IGNORECASE)
-            return re.sub(r'\s+', ' ', query).strip()
+            query = re.sub(r',\s*FROM', ' FROM', query, flags=re.IGNORECASE)
+
+            # Remove múltiplos espaços
+            query = re.sub(r'\s+', ' ', query).strip()
+
+            logging.error(f"🧼 Query original:\n{original_query}")
+            logging.error(f"🧹 Query após remover '{param_name}':\n{query}")
+            return query
+
 
         for connection in connections:
             db_slug = connection['slug'].strip().lower()
@@ -613,14 +650,8 @@ def execute_route_query(user_data, slug):
                 continue
 
             logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
-            logging.info(f"\n⚖️ Dados da conexão Oracle para {db_slug}:")
-            logging.info(f"Host: {connection['host']}")
-            logging.info(f"Porta: {connection['port']}")
-            logging.info(f"Usuário: {connection['username']}")
-            logging.info(f"Service Name: {connection.get('service_name')}")
-            logging.info(f"SID: {connection.get('sid')}")
-
             password = decrypt_password(connection['password'])
+
             db_conn = create_oracle_connection(
                 host=connection['host'],
                 port=connection['port'],
@@ -645,6 +676,8 @@ def execute_route_query(user_data, slug):
             current_query = re.sub(r"@(\w+)", r":\1", query_legacy)
 
             attempt_count = 0
+            removed_columns = []
+
             while True:
                 attempt_count += 1
                 found_vars = re.findall(r':(\w+)', current_query)
@@ -657,19 +690,9 @@ def execute_route_query(user_data, slug):
                 try:
                     db_cursor.execute(current_query, query_parameters)
                     db_conn.commit()
+                    executed_any_query = True
                     rows_affected = db_cursor.rowcount
                     logging.info(f"📊 Linhas afetadas: {rows_affected}")
-
-                    if rows_affected == 0:
-                        last_error = f"Nenhuma linha foi afetada pela query no banco Oracle para {db_slug}."
-                        results[db_slug] = {
-                            "error": "⚠️ Query executada, mas nenhuma linha foi afetada.",
-                            "message": last_error,
-                            "executed_query": current_query,
-                            "query_parameters": query_parameters,
-                            "rows_affected": rows_affected
-                        }
-                        break
 
                     results[db_slug] = {
                         "message": "✅ Query executada com sucesso.",
@@ -687,13 +710,12 @@ def execute_route_query(user_data, slug):
                     match = re.search(r'ORA-00904: "?(?P<coluna>\w+)"?: invalid identifier', last_error)
                     if match:
                         invalid_column = match.group("coluna")
-                        logging.warning(f"🔍 Coluna inválida detectada: {invalid_column}")
+                        removed_columns.append(invalid_column)
                         current_query = remove_invalid_column_from_query(current_query, invalid_column)
-                        logging.error(f"📉 Query após remoção da coluna '{invalid_column}':\n{current_query}")
                         continue
                     else:
                         results[db_slug] = {
-                            "error": "❌ Erro após ajustes.",
+                            "error": f"❌ Falha na execução após ajustes. Colunas removidas: {', '.join(removed_columns)}",
                             "message": last_error,
                             "executed_query": current_query,
                             "query_parameters": query_parameters
@@ -702,15 +724,10 @@ def execute_route_query(user_data, slug):
 
             db_cursor.close()
 
-        has_successful_result = any(
-            isinstance(r, dict) and r.get("rows_affected", 0) > 0
-            for r in results.values()
-        )
-
-        if not has_successful_result:
+        if not executed_any_query:
             return jsonify({
                 "status": "error",
-                "message": "Nenhuma linha foi afetada em nenhuma das conexões.",
+                "message": "Nenhuma query foi executada.",
                 "last_error": last_error,
                 "data": results
             }), 400
@@ -878,18 +895,18 @@ def validate_executor_parameters_with_user_input(executor_id, user_parameters):
             if param["value"] in (None, "") and param_value in (None, ""):
                 param_result["is_valid"] = False
                 param_result["error"] = f"O parâmetro '{param_name}' está vazio e é obrigatório."
-            
+
             # Validar tipos
             elif param["type"].lower() == "integer":
                 if not str(param_value).isdigit():
                     param_result["is_valid"] = False
                     param_result["error"] = f"O parâmetro '{param_name}' deve ser um número inteiro."
-            
+
             elif param["type"].lower() == "string":
                 if not isinstance(param_value, str):
                     param_result["is_valid"] = False
                     param_result["error"] = f"O parâmetro '{param_name}' deve ser uma string."
-            
+
             elif param["type"].lower() == "date":
                 try:
                     # Validar formato de data
@@ -909,4 +926,3 @@ def validate_executor_parameters_with_user_input(executor_id, user_parameters):
             "is_valid": False,
             "error": f"Erro ao validar parâmetros: {e}"
         }]
-        

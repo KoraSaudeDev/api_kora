@@ -1,5 +1,4 @@
-WITH PaginatedQuery AS (
-    SELECT 
+    SELECT
         ROW_NUMBER() OVER (ORDER BY ie.dh_mvto_estoque) AS row_num,
         ie.cd_mvto_estoque,
         ie.cd_itmvto_estoque,
@@ -31,14 +30,9 @@ WITH PaginatedQuery AS (
         NULLIF(REGEXP_REPLACE(ie.cd_itmvto_estoque_integra, '[''"!/:@;]', ''), '') AS cd_itmvto_estoque_integra,
         NULLIF(REGEXP_REPLACE(ie.sn_prod_recebido_solicitacao, '[''"!/:@;]', ''), '') AS sn_prod_recebido_solicitacao,
         to_char(ie.qt_recebido) AS qt_recebido,
-        to_char(ie.qt_retornada_doado) AS qt_retornada_doado
     FROM itmvto_estoque ie
-    WHERE 
-        ie.dh_mvto_estoque >= ADD_MONTHS(TRUNC(SYSDATE, 'mm'), 
+    WHERE
+        ie.dh_mvto_estoque >= ADD_MONTHS(TRUNC(SYSDATE, 'mm'),
             (CASE WHEN EXTRACT(DAY FROM SYSDATE) < 20 THEN '-5' ELSE '-4' END))
-        AND ie.dh_mvto_estoque < ADD_MONTHS(TRUNC(SYSDATE, 'mm'), 
+        AND ie.dh_mvto_estoque < ADD_MONTHS(TRUNC(SYSDATE, 'mm'),
             (CASE WHEN EXTRACT(DAY FROM SYSDATE) < 20 THEN '-1' ELSE '0' END))
-)
-SELECT *
-FROM PaginatedQuery
-WHERE row_num BETWEEN :start_row AND :end_row;
