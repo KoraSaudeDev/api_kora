@@ -715,7 +715,7 @@ def execute_route_query(user_data, slug):
                         continue
                     else:
                         results[db_slug] = {
-                            "error": f"❌ Falha na execução após ajustes. Colunas removidas: {', '.join(removed_columns)}",
+                            "error": f"❌ Falha na execução após ajustes das colunas removidas",
                             "message": last_error,
                             "executed_query": current_query,
                             "query_parameters": query_parameters
