@@ -550,12 +550,13 @@ def remove_quoted_strings(sql: str) -> str:
     """
     return re.sub(r"'[^']*'", '', sql)
 
+
 @route_bp.route('/execute/<slug>', methods=['POST'])
 @token_required
 @permission_required(route_prefix='/routes/execute')
 def execute_route_query(user_data, slug):
     try:
-        logging.error(f"🔹 [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
+        logging.error(f"▪️ [INICIANDO EXECUÇÃO] - Slug recebido: {slug}")
         request_data = request.json or {}
         logging.error(f"📅 Dados recebidos na requisição:\n{json.dumps(request_data, indent=4)}")
 
@@ -567,12 +568,9 @@ def execute_route_query(user_data, slug):
             for conn_name, params in param_entry.items()
         }
 
-        # Obter rota
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT r.id, r.query FROM routes r WHERE r.slug = %s
-        """, (slug,))
+        cursor.execute("SELECT r.id, r.query FROM routes r WHERE r.slug = %s", (slug,))
         route = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -582,7 +580,6 @@ def execute_route_query(user_data, slug):
 
         query_legacy = route['query']
 
-        # Obter conexões
         conn = create_db_connection_mysql()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
@@ -602,47 +599,118 @@ def execute_route_query(user_data, slug):
         def remove_invalid_column_from_query(query: str, param_name: str) -> str:
             logging.warning(f"🛠️ Removendo coluna inválida: {param_name}")
             original_query = query
-
-            # Remove TO_DATE(:param_name, 'format')
             query = re.sub(rf"TO_DATE\s*\(\s*:\s*{param_name}\s*,\s*'[^']*'\s*\)", '', query, flags=re.IGNORECASE)
-
-            # Remove trunc(:param_name)
             query = re.sub(rf"TRUNC\s*\(\s*:\s*{param_name}\s*\)", '', query, flags=re.IGNORECASE)
-
-            # Remove NVL(:param_name, ...)
             query = re.sub(rf"NVL\s*\(\s*:\s*{param_name}\s*,\s*[^)]+\)", '', query, flags=re.IGNORECASE)
-
-            # Remove binds simples
             query = re.sub(rf":{param_name}\b", '', query, flags=re.IGNORECASE)
-
-            # Remove a coluna do INSERT (antes ou depois da vírgula)
             query = re.sub(rf'\b{param_name}\b\s*,?', '', query, flags=re.IGNORECASE)
             query = re.sub(r',\s*\)', ')', query)
-
-            # Remove condições AND ... = :param
-            query = re.sub(
-                rf'AND\s+[^()]*{param_name}[^()]*?(=|<>|<|>|IS|LIKE|IN)[^()]*',
-                '',
-                query,
-                flags=re.IGNORECASE
-            )
-
-            # Limpeza de TO_DATE residual inválido
-            query = re.sub(r'TO_DATE\s*\(\s*:\s*,\s*\'[^\']*\'\s*\)', '', query, flags=re.IGNORECASE)
-
-            # Remove vírgulas duplas ou finais
+            query = re.sub(r'AND\s+[^()]*' + param_name + r'[^()]*?(=|<>|<|>|IS|LIKE|IN)[^()]*', '', query, flags=re.IGNORECASE)
             query = re.sub(r',\s*,', ',', query)
             query = re.sub(r'\(\s*,', '(', query)
             query = re.sub(r',\s*\)', ')', query)
             query = re.sub(r',\s*FROM', ' FROM', query, flags=re.IGNORECASE)
-
-            # Remove múltiplos espaços
             query = re.sub(r'\s+', ' ', query).strip()
 
-            logging.error(f"🧼 Query original:\n{original_query}")
-            logging.error(f"🧹 Query após remover '{param_name}':\n{query}")
+            # Substituição específica caso seja slug conhecido
+            if slug == 'bluemind_mv_tab115':
+                logging.warning("🔄 Substituindo por fallback para bluemind_mv_tab115")
+                return """
+                INSERT INTO DBAMV.PROIBICAO (
+                    CD_PRO_FAT, CD_CON_PLA, CD_CONVENIO, DS_PROIBICAO, TP_PROIBICAO,
+                    TP_ATENDIMENTO, DT_INICIAL_PROIBICAO, CD_MULTI_EMPRESA,
+                    CD_SETOR, CD_REGRA_PROIBICAO_VALOR
+                )
+                SELECT DISTINCT
+                    pf.cd_pro_fat, cp.CD_CON_PLA, ecp.CD_CONVENIO, :DS_PROIBICAO,
+                    :TP_PROIBICAO, :TP_ATENDIMENTO, :DT_INICIAL_PROIBICAO,
+                    ecp.CD_MULTI_EMPRESA, :CD_SETOR, :CD_REGRA_PROIBICAO_VALOR
+                FROM dbamv.CON_PLA cp, dbamv.EMPRESA_CON_PLA ecp, dbamv.pro_fat pf
+                WHERE cp.CD_CONVENIO = ecp.CD_CONVENIO
+                    AND cp.CD_CON_PLA = ecp.CD_CON_PLA
+                    AND cp.SN_ATIVO = 'S'
+                    AND ecp.SN_ATIVO = 'S'
+                    AND ecp.CD_CONVENIO = :CD_CONVENIO
+                    AND ecp.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
+                    AND ecp.CD_CON_PLA = NVL(:CD_CON_PLA, ecp.CD_CON_PLA)
+                    AND pf.sn_ativo = 'S'
+                    AND pf.CD_PRO_FAT = :CD_PRO_FAT
+                    AND NOT EXISTS (
+                        SELECT 'K'
+                        FROM DBAMV.PROIBICAO p
+                        WHERE p.CD_PRO_FAT = pf.cd_pro_fat
+                            AND p.CD_CONVENIO = cp.CD_CONVENIO
+                            AND NVL(p.CD_CON_PLA, 0) = NVL(cp.CD_CON_PLA, 0)
+                            AND p.TP_PROIBICAO = :TP_PROIBICAO
+                            AND p.TP_ATENDIMENTO = NVL(:TP_ATENDIMENTO, p.TP_ATENDIMENTO)
+                            AND TRUNC(p.DT_INICIAL_PROIBICAO) = TRUNC(TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'))
+                            AND p.CD_MULTI_EMPRESA = ecp.CD_MULTI_EMPRESA
+                            AND NVL(p.cd_setor, 0) = NVL(:CD_SETOR, 0)
+                    )
+                """
+            elif slug == 'bluemind_mv_tab116':
+                logging.warning("🔄 Substituindo por fallback para bluemind_mv_tab116")
+                return """
+                INSERT INTO DBAMV.PROIBICAO (
+                    CD_PRO_FAT, CD_CON_PLA, CD_CONVENIO, DS_PROIBICAO, TP_PROIBICAO,
+                    TP_ATENDIMENTO, DT_INICIAL_PROIBICAO, CD_MULTI_EMPRESA,
+                    CD_SETOR, CD_REGRA_PROIBICAO_VALOR
+                )
+                SELECT DISTINCT
+                    pf.cd_pro_fat, cp.CD_CON_PLA, ecp.CD_CONVENIO, :DS_PROIBICAO,
+                    :TP_PROIBICAO, :TP_ATENDIMENTO, TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'),
+                    ecp.CD_MULTI_EMPRESA, :CD_SETOR, :CD_REGRA_PROIBICAO_VALOR
+                FROM dbamv.CON_PLA cp, dbamv.EMPRESA_CON_PLA ecp, dbamv.pro_fat pf
+                WHERE cp.CD_CONVENIO = ecp.CD_CONVENIO
+                    AND cp.CD_CON_PLA = ecp.CD_CON_PLA
+                    AND cp.SN_ATIVO = 'S'
+                    AND ecp.SN_ATIVO = 'S'
+                    AND ecp.CD_CONVENIO = :CD_CONVENIO
+                    AND ecp.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
+                    AND ecp.CD_CON_PLA = NVL(:CD_CON_PLA, ecp.CD_CON_PLA)
+                    AND pf.sn_ativo = 'S'
+                    AND pf.CD_GRU_PRO = :CD_GRU_PRO
+                    AND NOT EXISTS (
+                        SELECT 'K'
+                        FROM DBAMV.PROIBICAO p
+                        WHERE p.CD_PRO_FAT = pf.cd_pro_fat
+                            AND p.CD_CONVENIO = cp.CD_CONVENIO
+                            AND NVL(p.CD_CON_PLA, 0) = NVL(cp.CD_CON_PLA, 0)
+                            AND p.TP_PROIBICAO = :TP_PROIBICAO
+                            AND p.TP_ATENDIMENTO = NVL(:TP_ATENDIMENTO, p.TP_ATENDIMENTO)
+                            AND TRUNC(p.DT_INICIAL_PROIBICAO) = TRUNC(TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'))
+                            AND p.CD_MULTI_EMPRESA = ecp.CD_MULTI_EMPRESA
+                            AND NVL(p.cd_setor, 0) = NVL(:CD_SETOR, 0)
+                    )
+                """
+            logging.error(f"🧹 Query final pós-substituição:\n{query}")
             return query
 
+        def build_update_query_with_non_nulls(query: str, params: dict) -> (str, dict):
+            set_clause_match = re.search(r'SET\s+(.*?)\s+WHERE', query, re.IGNORECASE | re.DOTALL)
+            if not set_clause_match:
+                return query, params
+            set_clause = set_clause_match.group(1)
+            assignments = re.findall(r'(\w+)\s*=\s*(TO_DATE\s*\(:\w+[^)]*\)|:\w+)', set_clause)
+            kept_assignments = []
+            kept_params = {}
+            for column, expression in assignments:
+                param_match = re.search(r':(\w+)', expression)
+                if not param_match:
+                    continue
+                param_name = param_match.group(1).lower()
+                value = params.get(param_name)
+                if value not in [None, "", "null"]:
+                    kept_assignments.append(f"{column} = {expression}")
+                    kept_params[param_name] = value
+            set_clause_clean = ', '.join(kept_assignments)
+            new_query = re.sub(r'SET\s+.*?\s+WHERE', f"SET {set_clause_clean} WHERE", query, flags=re.IGNORECASE | re.DOTALL)
+            where_params = re.findall(r':(\w+)', new_query)
+            for param in where_params:
+                param_lower = param.lower()
+                if param_lower not in kept_params:
+                    kept_params[param_lower] = params.get(param_lower)
+            return new_query, kept_params
 
         for connection in connections:
             db_slug = connection['slug'].strip().lower()
@@ -651,7 +719,6 @@ def execute_route_query(user_data, slug):
 
             logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
             password = decrypt_password(connection['password'])
-
             db_conn = create_oracle_connection(
                 host=connection['host'],
                 port=connection['port'],
@@ -660,7 +727,6 @@ def execute_route_query(user_data, slug):
                 service_name=connection.get('service_name'),
                 sid=connection.get('sid')
             )
-
             if not db_conn:
                 results[db_slug] = f"⚠️ Falha ao conectar com {db_slug}."
                 continue
@@ -676,14 +742,16 @@ def execute_route_query(user_data, slug):
             current_query = re.sub(r"@(\w+)", r":\1", query_legacy)
 
             attempt_count = 0
-            removed_columns = []
-
             while True:
                 attempt_count += 1
-                found_vars = re.findall(r':(\w+)', current_query)
-                query_parameters = {var.lower(): final_params.get(var.lower(), None) for var in found_vars}
+                query_type = current_query.strip().split()[0].upper()
+                if query_type == "UPDATE":
+                    current_query, query_parameters = build_update_query_with_non_nulls(current_query, final_params)
+                else:
+                    found_vars = re.findall(r':(\w+)', current_query)
+                    query_parameters = {var.lower(): final_params.get(var.lower()) for var in found_vars}
 
-                logging.error(f"🪢 [Tentativa {attempt_count}] Executando query para {db_slug}")
+                logging.error(f"🧵 [Tentativa {attempt_count}] Executando query para {db_slug}")
                 logging.error(f"📝 Query atual:\n{current_query}")
                 logging.error(f"📌 Parâmetros:\n{json.dumps(query_parameters, indent=4)}")
 
@@ -693,7 +761,6 @@ def execute_route_query(user_data, slug):
                     executed_any_query = True
                     rows_affected = db_cursor.rowcount
                     logging.info(f"📊 Linhas afetadas: {rows_affected}")
-
                     results[db_slug] = {
                         "message": "✅ Query executada com sucesso.",
                         "executed_query": current_query,
@@ -701,27 +768,26 @@ def execute_route_query(user_data, slug):
                         "rows_affected": rows_affected
                     }
                     break
-
                 except Exception as e:
                     last_error = str(e)
                     logging.error(f"❌ Erro tentativa {attempt_count}: {last_error}")
                     logging.error(traceback.format_exc())
-
-                    match = re.search(r'ORA-00904: "?(?P<coluna>\w+)"?: invalid identifier', last_error)
-                    if match:
-                        invalid_column = match.group("coluna")
-                        removed_columns.append(invalid_column)
-                        current_query = remove_invalid_column_from_query(current_query, invalid_column)
-                        continue
-                    else:
-                        results[db_slug] = {
-                            "error": f"❌ Falha na execução após ajustes das colunas removidas",
-                            "message": last_error,
-                            "executed_query": current_query,
-                            "query_parameters": query_parameters
-                        }
-                        break
-
+                    if "invalid identifier" in last_error.lower():
+                        match = re.search(r'"?(\w+)"?\.\w+', last_error)
+                        invalid_column = match.group(1) if match else None
+                        if not invalid_column:
+                            match = re.search(r'"(\w+)"', last_error)
+                            invalid_column = match.group(1) if match else None
+                        if invalid_column:
+                            current_query = remove_invalid_column_from_query(current_query, invalid_column)
+                            continue
+                    results[db_slug] = {
+                        "error": "❌ Falha na execução após ajustes das colunas removidas",
+                        "message": last_error,
+                        "executed_query": current_query,
+                        "query_parameters": query_parameters
+                    }
+                    break
             db_cursor.close()
 
         if not executed_any_query:
