@@ -14,6 +14,7 @@ import cx_Oracle
 from sqlalchemy.sql import text
 from app.utils.db_connections import create_oracle_connection, create_mysql_connection
 from app.utils.security import decrypt_password
+from typing import Tuple
 
 # Blueprint para rotas
 route_bp = Blueprint('routes', __name__, url_prefix='/routes')
@@ -550,7 +551,6 @@ def remove_quoted_strings(sql: str) -> str:
     """
     return re.sub(r"'[^']*'", '', sql)
 
-
 @route_bp.route('/execute/<slug>', methods=['POST'])
 @token_required
 @permission_required(route_prefix='/routes/execute')
@@ -686,7 +686,7 @@ def execute_route_query(user_data, slug):
             logging.error(f"🧹 Query final pós-substituição:\n{query}")
             return query
 
-        def build_update_query_with_non_nulls(query: str, params: dict) -> (str, dict):
+        def build_update_query_with_non_nulls(query: str, params: dict) -> Tuple[str, dict]:
             set_clause_match = re.search(r'SET\s+(.*?)\s+WHERE', query, re.IGNORECASE | re.DOTALL)
             if not set_clause_match:
                 return query, params
@@ -711,6 +711,7 @@ def execute_route_query(user_data, slug):
                 if param_lower not in kept_params:
                     kept_params[param_lower] = params.get(param_lower)
             return new_query, kept_params
+
 
         for connection in connections:
             db_slug = connection['slug'].strip().lower()
@@ -804,7 +805,6 @@ def execute_route_query(user_data, slug):
         logging.error(f"❌ Erro inesperado: {str(e)}")
         logging.error(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @route_bp.route('/bluemind/sequence/', methods=['POST'])
 @token_required
