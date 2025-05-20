@@ -640,36 +640,36 @@ def execute_route_query(user_data, slug):
                     """
                 elif slug == 'bluemind_mv_tab116':
                     return """
-                    INSERT INTO DBAMV.PROIBICAO (
-                        CD_PRO_FAT, CD_CON_PLA, CD_CONVENIO, DS_PROIBICAO, TP_PROIBICAO,
-                        TP_ATENDIMENTO, DT_INICIAL_PROIBICAO, CD_MULTI_EMPRESA,
-                        CD_SETOR, CD_REGRA_PROIBICAO_VALOR
+        INSERT INTO DBAMV.PROIBICAO (
+             CD_PRO_FAT, CD_CON_PLA, CD_CONVENIO, DS_PROIBICAO, TP_PROIBICAO,
+             TP_ATENDIMENTO, DT_INICIAL_PROIBICAO, CD_MULTI_EMPRESA,
+             CD_SETOR, CD_REGRA_PROIBICAO_VALOR
                     )
                     SELECT DISTINCT
-                        pf.cd_pro_fat, cp.CD_CON_PLA, ecp.CD_CONVENIO, :DS_PROIBICAO,
-                        :TP_PROIBICAO, :TP_ATENDIMENTO, TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'),
-                        ecp.CD_MULTI_EMPRESA, :CD_SETOR, :CD_REGRA_PROIBICAO_VALOR
-                    FROM dbamv.CON_PLA cp, dbamv.EMPRESA_CON_PLA ecp, dbamv.pro_fat pf
-                    WHERE cp.CD_CONVENIO = ecp.CD_CONVENIO
-                        AND cp.CD_CON_PLA = ecp.CD_CON_PLA
+             pf.cd_pro_fat, cp.CD_CON_PLA, ecp.CD_CONVENIO, :DS_PROIBICAO,
+             :TP_PROIBICAO, :TP_ATENDIMENTO, TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'),
+             ecp.CD_MULTI_EMPRESA, :CD_SETOR, :CD_REGRA_PROIBICAO_VALOR
+         FROM dbamv.CON_PLA cp, dbamv.EMPRESA_CON_PLA ecp, dbamv.pro_fat pf
+         WHERE cp.CD_CONVENIO = ecp.CD_CONVENIO
+             AND cp.CD_CON_PLA = ecp.CD_CON_PLA
                         AND cp.SN_ATIVO = 'S'
                         AND ecp.SN_ATIVO = 'S'
-                        AND ecp.CD_CONVENIO = :CD_CONVENIO
-                        AND ecp.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
-                        AND ecp.CD_CON_PLA = NVL(:CD_CON_PLA, ecp.CD_CON_PLA)
+             AND ecp.CD_CONVENIO = :CD_CONVENIO
+             AND ecp.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
+             AND ecp.CD_CON_PLA = NVL(:CD_CON_PLA, ecp.CD_CON_PLA)
                         AND pf.sn_ativo = 'S'
-                        AND pf.CD_GRU_PRO = :CD_GRU_PRO
+           AND pf.CD_GRU_PRO = :CD_PRO_FAT
                         AND NOT EXISTS (
                             SELECT 'K'
-                            FROM DBAMV.PROIBICAO p
-                            WHERE p.CD_PRO_FAT = pf.cd_pro_fat
-                                AND p.CD_CONVENIO = cp.CD_CONVENIO
-                                AND NVL(p.CD_CON_PLA, 0) = NVL(cp.CD_CON_PLA, 0)
-                                AND p.TP_PROIBICAO = :TP_PROIBICAO
-                                AND p.TP_ATENDIMENTO = NVL(:TP_ATENDIMENTO, p.TP_ATENDIMENTO)
-                                AND TRUNC(p.DT_INICIAL_PROIBICAO) = TRUNC(TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'))
-                                AND p.CD_MULTI_EMPRESA = ecp.CD_MULTI_EMPRESA
-                                AND NVL(p.cd_setor, 0) = NVL(:CD_SETOR, 0)
+                 FROM DBAMV.PROIBICAO p
+                 WHERE p.CD_PRO_FAT = pf.cd_pro_fat
+                   AND p.CD_CONVENIO = cp.CD_CONVENIO
+                     AND NVL(p.CD_CON_PLA, 0) = NVL(cp.CD_CON_PLA, 0)
+                   AND p.TP_PROIBICAO = :TP_PROIBICAO
+                     AND p.TP_ATENDIMENTO = NVL(:TP_ATENDIMENTO, p.TP_ATENDIMENTO)
+                     AND TRUNC(p.DT_INICIAL_PROIBICAO) = TRUNC(TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'))
+                     AND p.CD_MULTI_EMPRESA = ecp.CD_MULTI_EMPRESA
+                     AND NVL(p.cd_setor, 0) = NVL(:CD_SETOR, 0)
                         )
                     """
 
