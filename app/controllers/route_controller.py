@@ -613,7 +613,7 @@ def execute_route_query(user_data, slug):
                     )
                     SELECT DISTINCT
                         pf.cd_pro_fat, cp.CD_CON_PLA, ecp.CD_CONVENIO, :DS_PROIBICAO,
-                        :TP_PROIBICAO, :TP_ATENDIMENTO, :DT_INICIAL_PROIBICAO,
+                        :TP_PROIBICAO, :TP_ATENDIMENTO, TO_DATE(:DT_INICIAL_PROIBICAO, 'DD/MM/YYYY'),
                         ecp.CD_MULTI_EMPRESA, :CD_SETOR, :CD_REGRA_PROIBICAO_VALOR
                     FROM dbamv.CON_PLA cp, dbamv.EMPRESA_CON_PLA ecp, dbamv.pro_fat pf
                     WHERE cp.CD_CONVENIO = ecp.CD_CONVENIO
