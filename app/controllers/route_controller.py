@@ -964,6 +964,111 @@ def get_sequence_nextval(user_data):
         logging.error(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+@route_bp.route('/bluemind/table_structure/', methods=['POST'])
+@token_required
+@permission_required(route_prefix='/routes')
+def get_table_structure(user_data):
+    try:
+        logging.info("🔹 Iniciando obtenção da estrutura da tabela")
+        request_data = request.json or {}
+        logging.info(f"📥 Dados recebidos: {json.dumps(request_data, indent=4)}")
+
+        provided_connections = request_data.get("connections", [])
+        provided_parameters_list = request_data.get("parameters", [])
+
+        provided_parameters = {}
+        for param_entry in provided_parameters_list:
+            for connection_name, params in param_entry.items():
+                provided_parameters[connection_name] = params
+
+        # Obter credenciais Oracle
+        conn = create_db_connection_mysql()
+        cursor = conn.cursor(dictionary=True)
+        query = """
+            SELECT c.slug, c.db_type, c.host, c.port, c.username, c.password, c.service_name, c.sid
+            FROM connections c
+            WHERE c.slug IN (%s)
+        """ % (",".join(["%s"] * len(provided_connections)))
+        cursor.execute(query, tuple(provided_connections))
+        connections = {conn["slug"]: conn for conn in cursor.fetchall()}
+        cursor.close()
+        conn.close()
+
+        if not connections:
+            return jsonify({"status": "error", "message": "❌ Nenhuma conexão encontrada."}), 404
+
+        results = {}
+        for db_slug, params in provided_parameters.items():
+            if db_slug not in connections:
+                continue
+
+            conn_details = connections[db_slug]
+            if conn_details["db_type"].lower() != "oracle":
+                results[db_slug] = "⚠️ Não é Oracle."
+                continue
+
+            schema = params.get("schema")
+            table_name = params.get("table_name")
+
+            if not schema or not table_name:
+                results[db_slug] = "⚠️ Schema ou tabela não informados."
+                continue
+
+            try:
+                password = decrypt_password(conn_details["password"])
+                db_conn = create_oracle_connection(
+                    host=conn_details["host"],
+                    port=conn_details["port"],
+                    user=conn_details["username"],
+                    password=password,
+                    service_name=conn_details.get("service_name"),
+                    sid=conn_details.get("sid")
+                )
+
+                db_cursor = db_conn.cursor()
+
+                query = f"""
+                    SELECT column_name, data_type, data_length, data_precision, data_scale, nullable
+                    FROM all_tab_columns
+                    WHERE owner = :schema
+                      AND table_name = :table_name
+                    ORDER BY column_id
+                """
+                db_cursor.execute(query, {"schema": schema.upper(), "table_name": table_name.upper()})
+                columns = db_cursor.fetchall()
+
+                structure = []
+                for col in columns:
+                    structure.append({
+                        "column_name": col[0],
+                        "data_type": col[1],
+                        "data_length": col[2],
+                        "data_precision": col[3],
+                        "data_scale": col[4],
+                        "nullable": col[5]
+                    })
+
+                results[db_slug] = structure
+
+                db_cursor.close()
+                db_conn.close()
+
+            except Exception as e:
+                results[db_slug] = f"❌ Erro: {str(e)}"
+                logging.error(f"[{db_slug}] Erro: {str(e)}")
+                continue
+
+        return jsonify({"status": "success", "data": results}), 200
+
+    except Exception as e:
+        logging.error(f"Erro inesperado: {str(e)}")
+        logging.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+
 def validate_executor_parameters_with_user_input(executor_id, user_parameters):
     """
     Valida os parâmetros de um executor considerando valores fornecidos pelo usuário.
