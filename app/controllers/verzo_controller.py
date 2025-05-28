@@ -30,7 +30,8 @@ MV_DATABASES = [
     "mv_cariacica",
     "mv_neurologia_goiania",
     "mv_sao_luiz",
-    "mv_praia_da_costa"
+    "mv_praia_da_costa",
+    "mv_sao_francisco"
 ]
 
 TASY_DATABASES = [
