@@ -13,26 +13,36 @@ lock = threading.Lock()
 # Limites padrão
 MAX_REQUESTS_DEFAULT = 10
 WINDOW_SECONDS_DEFAULT = 1
-BLOCK_DURATION = 30 * 60  # 30 minutos
+BLOCK_DURATION_DEFAULT = 2 * 60 * 60
 
-# Lista branca de IPs e limites especiais
+# Lista branca de IPs com limites e bloqueios especiais
 WHITELISTED_IPS = {
-    "136.248.89.4": {"max_requests": 80, "window_seconds": 1},
-    "20.122.114.244": {"max_requests": 80, "window_seconds": 1},
+    "136.248.89.4": {
+        "max_requests": 80,
+        "window_seconds": 1,
+        "block_duration": 10 * 60  # 10 minutos
+    },
+    "20.122.114.244": {
+        "max_requests": 80,
+        "window_seconds": 1,
+        "block_duration": 10 * 60  # 10 minutos
+    },
 }
 
 def rate_limit():
     ip = request.headers.get("X-Forwarded-For", request.remote_addr)
     now = time.time()
 
-    # Seleciona limites conforme IP
+    # Configura limites e duração do bloqueio
     limits = WHITELISTED_IPS.get(ip, {
         "max_requests": MAX_REQUESTS_DEFAULT,
-        "window_seconds": WINDOW_SECONDS_DEFAULT
+        "window_seconds": WINDOW_SECONDS_DEFAULT,
+        "block_duration": BLOCK_DURATION_DEFAULT
     })
 
     max_requests = limits["max_requests"]
     window_seconds = limits["window_seconds"]
+    block_duration = limits["block_duration"]
 
     with lock:
         # Verifica se IP está bloqueado
@@ -44,14 +54,14 @@ def rate_limit():
             else:
                 del blocked_ips[ip]
 
-        # Registra timestamps recentes
+        # Filtra e registra requisições recentes
         request_times = request_counts[ip]
         request_times = [t for t in request_times if now - t < window_seconds]
         request_times.append(now)
         request_counts[ip] = request_times
 
         if len(request_times) > max_requests:
-            blocked_ips[ip] = now + BLOCK_DURATION
+            blocked_ips[ip] = now + block_duration
             del request_counts[ip]
             _log_blocked_request(ip, request.path, 429)
             return jsonify({"error": "IP bloqueado por excesso de requisições. Tente novamente mais tarde."}), 429
