@@ -37,7 +37,7 @@ pyodbc==4.0.35  # Para ODBC (e.g., SQL Server, SAP)
 
 # Bancos de dados NoSQL
 pymongo==4.5.0  # MongoDB
-redis==5.0.0  # Redis
+# redis==5.0.0  # Redis
 cassandra-driver==3.25.0  # Cassandra
 
 # Outras dependências
@@ -46,4 +46,4 @@ hdbcli==2.23.24  # SAP HAN
 requests
 
 celery
-redis
+# redis

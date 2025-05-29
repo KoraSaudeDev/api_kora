@@ -1,4 +1,5 @@
 version: "3.9"
+
 services:
   app:
     build:
@@ -14,14 +15,19 @@ services:
       PATH: "/opt/oracle/instantclient:$PATH"
       TNS_ADMIN: /opt/oracle/instantclient
     depends_on:
-      - redis
+      - rabbitmq
       - worker
     restart: always
 
-  redis:
-    image: redis:7
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
     ports:
-      - "6379:6379"
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
 
   worker:
     build:
@@ -36,5 +42,4 @@ services:
       PATH: "/opt/oracle/instantclient:$PATH"
       TNS_ADMIN: /opt/oracle/instantclient
     depends_on:
-      - redis
-
+      - rabbitmq

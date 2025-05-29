@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-celery_app = Celery("verzo_logger", broker="redis://redis:6379/0")
+celery_app = Celery("verzo_logger", broker="amqp://guest:guest@rabbitmq:5672//")
 
 @celery_app.task
 def log_request_to_db(username, endpoint, status_code, requested_at, ip_address):
