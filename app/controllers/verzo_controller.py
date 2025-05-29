@@ -14,6 +14,7 @@ DATABASE_GLOSSARY = {
     "HA": "mv_anchieta",
     "HMC": "mv_cariacica",
     "ING_OTO": "mv_neurologia_goiania",
+    "HSM": "mv_sao_matheus",
     "HPC": "mv_praia_da_costa",
     "HSL": "mv_sao_luiz",
     "HSF": "mv_sao_francisco",
@@ -31,7 +32,8 @@ MV_DATABASES = [
     "mv_neurologia_goiania",
     "mv_sao_luiz",
     "mv_praia_da_costa",
-    "mv_sao_francisco"
+    "mv_sao_francisco",
+    "mv_sao_matheus"
 ]
 
 TASY_DATABASES = [
