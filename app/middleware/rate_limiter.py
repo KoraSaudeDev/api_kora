@@ -18,12 +18,12 @@ BLOCK_DURATION_DEFAULT = 2 * 60 * 60
 # Lista branca de IPs com limites e bloqueios especiais
 WHITELISTED_IPS = {
     "136.248.89.4": {
-        "max_requests": 80,
+        "max_requests": 8000,
         "window_seconds": 1,
         "block_duration": 10 * 60  # 10 minutos
     },
     "20.122.114.244": {
-        "max_requests": 80,
+        "max_requests": 8000,
         "window_seconds": 1,
         "block_duration": 10 * 60  # 10 minutos
     },
