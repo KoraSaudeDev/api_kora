@@ -41,7 +41,8 @@ TASY_DATABASES = [
     "tasy_IRT",
     "tasy_encore",
     "tasy_palmas",
-    "tasy_sao_francisco"
+    "tasy_sao_francisco",
+    "tasy_sao_matheus"
 ]
 
 @verzo_bp.route('/', methods=['GET'])
