@@ -743,14 +743,29 @@ def execute_route_query(user_data, slug):
             logging.error(f"✅ Conexão {db_slug} será utilizada para execução.")
             password = decrypt_password(connection['password'])
 
-            db_conn = create_oracle_connection(
-                host=connection['host'],
-                port=connection['port'],
-                user=connection['username'],
-                password=password,
-                service_name=connection.get('service_name'),
-                sid=connection.get('sid')
-            )
+            # 1) Levantar a conexão certa
+            if connection['db_type'] == 'oracle':
+                db_conn = create_oracle_connection(
+                    host=connection['host'],
+                    port=connection['port'],
+                    user=connection['username'],
+                    password=password,
+                    service_name=connection.get('service_name'),
+                    sid=connection.get('sid')
+                )
+                placeholder_style = "oracle"
+            elif connection['db_type'] in ('mysql', 'mariadb'):
+                db_conn = create_db_connection_mysql(
+                    host=connection['host'],
+                    port=connection['port'],
+                    user=connection['username'],
+                    password=password,
+                    database=connection['database_name']
+                )
+                placeholder_style = "mysql"
+            else:
+                results[db_slug] = f"⚠️ Tipo de DB não suportado: {connection['db_type']}"
+                continue
 
             if not db_conn:
                 results[db_slug] = f"⚠️ Falha ao conectar com {db_slug}."
@@ -803,17 +818,27 @@ def execute_route_query(user_data, slug):
                     logging.error(f"❌ Erro tentativa {attempt_count}: {last_error}")
                     logging.error(traceback.format_exc())
 
-                    # ✅ Trata apenas erros "invalid identifier"
-                    if "invalid identifier" in last_error.lower():
-                        match = re.search(r'"?(?P<coluna>\w+)"?\s*: invalid identifier', last_error)
+                    # ✅ Trata erros de coluna inválida ou sinônimo inválido
+                    if "invalid identifier" in last_error.lower() or "synonym translation is no longer valid" in last_error.lower():
+                        match = re.search(r'ORA-00904:\s+"?(?:\w+"\.)?"?(?P<coluna>\w+)"?', last_error)
+                        
                         if match:
                             invalid_column = match.group("coluna")
                             removed_columns.append(invalid_column)
                             current_query = remove_invalid_column_from_query(current_query, invalid_column)
                             continue  # tenta novamente com a coluna removida
+                        elif "synonym translation is no longer valid" in last_error.lower():
+                            if slug in ['bluemind_mv_tab115', 'bluemind_mv_tab116']:
+                                logging.warning("🔁 Substituindo query para slug especial após ORA-00980 (synonym inválido).")
+                                current_query = remove_invalid_column_from_query(current_query, "")  # força uso da query alternativa
+                                continue
+                            else:
+                                logging.warning("⚠️ ORA-00980 em slug sem tratamento especial.")
+                                break
                         else:
-                            logging.warning("⚠️ 'invalid identifier' sem coluna capturada.")
+                            logging.warning("⚠️ 'invalid identifier' ou erro relacionado sem coluna capturada.")
                             break
+
 
                     # ❌ Qualquer outro erro deve encerrar a execução
                     results[db_slug] = {
