@@ -7,3 +7,4 @@ app/utils/__pycache__/*
 .venv
 /instantclient-basic-linux.zip
 instantclient-basic-linux.zip
+itsmkora-account-file.json

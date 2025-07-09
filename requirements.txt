@@ -22,7 +22,6 @@ psycopg2-binary==2.9.7  # Para conexões PostgreSQL
 pyodbc==4.0.35  # Para conexões ODBC (e.g., SQL Server, SAP)
 hdbcli==2.23.24  # Para conexões SAP HANA
 pymongo==4.5.0  # Para conexões MongoDB
-redis==5.0.0  # Para conexões Redis
 cassandra-driver==3.25.0  # Para conexões Cassandra'
 snowflake-connector-python==3.0.0
 firebase-admin==6.0.1  # Para conexões Firebase
@@ -37,7 +36,6 @@ pyodbc==4.0.35  # Para ODBC (e.g., SQL Server, SAP)
 
 # Bancos de dados NoSQL
 pymongo==4.5.0  # MongoDB
-# redis==5.0.0  # Redis
 cassandra-driver==3.25.0  # Cassandra
 
 # Outras dependências
@@ -45,5 +43,7 @@ sqlalchemy==2.0.21
 hdbcli==2.23.24  # SAP HAN
 requests
 
+redis==5.0.0  # Redis
+
 celery
-# redis
+amqp

@@ -12,6 +12,7 @@ from app.controllers.user_controller import user_bp
 # from app.controllers.executor_controller import executor_bp
 from app.controllers.access_controller import access_bp
 from app.controllers.dashboard_controller import dashboard_bp
+from app.controllers.integration_controller import integration_bp
 import logging
 import sys
 from app import create_app
@@ -21,6 +22,8 @@ from celery_worker import log_request_to_db
 import threading
 import time
 from app.middleware.rate_limiter import rate_limit
+from app.scheduler.job_scheduler import start_scheduler
+import socket
 
 app = create_app()
 
@@ -105,6 +108,7 @@ app.register_blueprint(user_bp, url_prefix="/api/users")
 # app.register_blueprint(executor_bp, url_prefix="/api/executors")
 app.register_blueprint(access_bp, url_prefix="/api/access")
 app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
+app.register_blueprint(integration_bp, url_prefix="/api/integration")
 
 @app.route('/api', methods=['GET'])
 def home():
@@ -151,5 +155,23 @@ def log_request(response):
     
     return response
 
+def wait_for_rabbitmq(host="rabbitmq", port=5672, timeout=30):
+    logging.info("🐇 Aguardando RabbitMQ iniciar...")
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=5):
+                logging.info("✅ RabbitMQ está pronto!")
+                return True
+        except (socket.timeout, ConnectionRefusedError):
+            logging.info("⏳ RabbitMQ ainda não está pronto. Tentando novamente em 2s...")
+            time.sleep(2)
+
+    logging.error("❌ RabbitMQ não respondeu dentro do tempo limite.")
+    return False
+
 if __name__ == "__main__":
+    if wait_for_rabbitmq():
+        start_scheduler()
     app.run(host="0.0.0.0", port=5000, debug=True)

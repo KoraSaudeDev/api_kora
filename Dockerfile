@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
 # Copiar o Oracle Instant Client para dentro do container
 COPY instantclient-basic-linux.zip /opt/oracle/
 
+COPY itsmkora-account-file.json . 
+
 # Instalar o Oracle Instant Client
 RUN mkdir -p /opt/oracle && \
     cd /opt/oracle && \
