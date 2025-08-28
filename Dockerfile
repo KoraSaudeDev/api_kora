@@ -1,14 +1,16 @@
-# Usar uma imagem base oficial do Python (Debian 13/trixie)
-FROM python:3.10-slim
+# Usar uma imagem base oficial do Python
+FROM python:3.9-slim
 
+# Definir o diretório de trabalho dentro do container
 WORKDIR /app
 
-# Instalar deps do Oracle Instant Client no trixie (t64)
+# Instalar pacotes necessários para o Oracle Client
+# Se a base for Debian 13 (trixie), troque 'libaio1' por 'libaio1t64'
 RUN apt-get update && apt-get install -y \
-    libaio1t64 libnsl2 unzip \
-    && rm -rf /var/lib/apt/lists/*
+    libaio1 unzip \
+ && rm -rf /var/lib/apt/lists/*
 
-# Copiar o zip do Instant Client (garanta que o nome bate!)
+# Copiar o Oracle Instant Client para dentro do container
 COPY instantclient-basic-linux.zip /opt/oracle/
 COPY itsmkora-account-file.json .
 
@@ -21,14 +23,23 @@ RUN mkdir -p /opt/oracle && \
     echo "/opt/oracle/instantclient" > /etc/ld.so.conf.d/oracle-instantclient.conf && \
     ldconfig
 
-ENV LD_LIBRARY_PATH=/opt/oracle/instantclient
-ENV PATH="$PATH:/opt/oracle/instantclient"
-ENV TNS_ADMIN=/opt/oracle/instantclient
-ENV ORACLE_CLIENT_VERSION=23.6
+# Definir variáveis de ambiente do Oracle Client
+ENV LD_LIBRARY_PATH=/opt/oracle/instantclient \
+    PATH="$PATH:/opt/oracle/instantclient" \
+    TNS_ADMIN=/opt/oracle/instantclient \
+    ORACLE_CLIENT_VERSION=23.6
 
+# Copiar os arquivos de dependências para o container
 COPY requirements.txt .
+
+# Instalar as dependências do Python
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copiar o restante da aplicação para o diretório de trabalho do container
 COPY . .
+
+# Expor a porta correta
 EXPOSE 5000
+
+# Comando para rodar a aplicação
 CMD ["python", "main.py"]
