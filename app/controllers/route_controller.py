@@ -602,7 +602,7 @@ def execute_route_query(user_data, slug):
             logging.warning(f"🛠️ Removendo coluna inválida: {param_name}")
 
             # ✅ Lógica específica para os slugs especiais
-            if slug in ['bluemind_mv_tab115', 'bluemind_mv_tab116']:
+            if slug in ['bluemind_mv_tab115', 'bluemind_mv_tab116', 'bluemind_mv_tab_127_homolog', 'bluemind_mv_tab_127_homolog']:
                 logging.warning(f"🔁 Substituindo query para slug '{slug}' devido a erro de coluna inválida")
                 if slug == 'bluemind_mv_tab115':
                     return """
@@ -671,6 +671,30 @@ def execute_route_query(user_data, slug):
                      AND p.CD_MULTI_EMPRESA = ecp.CD_MULTI_EMPRESA
                      AND NVL(p.cd_setor, 0) = NVL(:CD_SETOR, 0)
                         )
+                    """
+                elif slug == 'bluemind_mv_tab_127_homolog':
+                    return """
+                    DELETE DBAMV.PROIBICAO p
+                    WHERE p.CD_PRO_FAT = :CD_PRO_FAT
+                    AND p.CD_CONVENIO = :CD_CONVENIO
+                    AND p.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
+                    AND p.CD_CON_PLA = nvl(:CD_CON_PLA, p.CD_CON_PLA)
+                    AND p.TP_PROIBICAO = :TP_PROIBICAO
+                    AND p.TP_ATENDIMENTO = :TP_ATENDIMENTO
+                    AND nvl(p.CD_SETOR, 0) = nvl(:CD_SETOR, nvl(p.CD_SETOR, 0))
+                    AND nvl(p.CD_REGRA_PROIBICAO_VALOR, 0) = nvl(:CD_REGRA_PROIBICAO_VALOR, nvl(p.CD_REGRA_PROIBICAO_VALOR, 0))
+                    """
+                elif slug == 'bluemind_mv_tab_128_homolog':
+                    return """
+                    DELETE DBAMV.PROIBICAO p
+                    WHERE EXISTS (SELECT 1 FROM dbamv.pro_fat pf WHERE pf.CD_GRU_PRO = :pCD_PRO_FAT AND pf.cd_pro_fat = p.CD_PRO_FAT)
+                    AND p.CD_CONVENIO = :CD_CONVENIO
+                    AND p.CD_MULTI_EMPRESA = :CD_MULTI_EMPRESA
+                    AND p.CD_CON_PLA = nvl(:CD_CON_PLA, p.CD_CON_PLA)
+                    AND p.TP_PROIBICAO = :TP_PROIBICAO
+                    AND p.TP_ATENDIMENTO = :TP_ATENDIMENTO
+                    AND nvl(p.CD_SETOR, 0) = nvl(:CD_SETOR, nvl(p.CD_SETOR, 0))
+                    AND nvl(p.CD_REGRA_PROIBICAO_VALOR, 0) = nvl(:CD_REGRA_PROIBICAO_VALOR, nvl(p.CD_REGRA_PROIBICAO_VALOR, 0))
                     """
 
             # 🔧 Caso comum continua aqui
